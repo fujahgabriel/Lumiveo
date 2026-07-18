@@ -33,7 +33,7 @@ const PackageTarget = enum {
 };
 
 const fallback_native_sdk_path ="/Users/fujah/.npm/_npx/acaf3f88d1a573c6/node_modules/@native-sdk/cli";
-const app_exe_name = "app-demo-studio";
+const app_exe_name = "lumiveo";
 
 fn defaultNativeSdkPath(b: *std.Build) []const u8 {
     if (b.graph.environ_map.get("NATIVE_SDK_PATH")) |path| {

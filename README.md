@@ -1,4 +1,4 @@
-# App Demo Studio
+# Lumiveo
 
 A local-first macOS desktop app that turns app screenshots, recordings, GIFs and audio into polished, localised demo videos — with an optional AI storyboard agent and provider-agnostic analytics.
 
@@ -19,8 +19,8 @@ frontend (zero://app / :5173)  ──HTTP+token──▶  worker (127.0.0.1:4817
         └── app.workerInfo / native dialogs ◀── native shell (spawns worker in packaged builds)
 ```
 
-- **Portable projects** live at `~/Library/Application Support/App Demo Studio/Projects/<id>.appdemo/` (`project.json` + `assets/`). SQLite is only the app index — user work survives a database wipe.
-- **Secrets** are stored in macOS Keychain (`com.appdemostudio.providers`); SQLite keeps only provider config.
+- **Portable projects** live at `~/Library/Application Support/Lumiveo/Projects/<id>.appdemo/` (`project.json` + `assets/`). SQLite is only the app index — user work survives a database wipe.
+- **Secrets** are stored in macOS Keychain (`com.lumiveo.providers`); SQLite keeps only provider config.
 - **Analytics** is consent-gated, allowlist-only (key events + sanitized exceptions), queued in SQLite, with PostHog / Firebase / no-op adapters.
 
 ## Commands

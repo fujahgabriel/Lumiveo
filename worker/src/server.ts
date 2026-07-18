@@ -271,7 +271,7 @@ function authorized(request: IncomingMessage, url: URL) {
 
 function setCors(request: IncomingMessage, response: ServerResponse) {
   const origin = request.headers.origin;
-  const allowed = origin === config.frontendOrigin || origin === "zero://app";
+  const allowed = origin === config.frontendOrigin || origin === "zero://app" || origin?.startsWith("http://localhost:");
   if (origin && allowed) response.setHeader("access-control-allow-origin", origin);
   response.setHeader("vary", "Origin");
   response.setHeader("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -338,7 +338,7 @@ const flushTimer = setInterval(() => void analytics.flush(), 30_000);
 flushTimer.unref();
 
 server.listen(config.port, config.host, () => {
-  console.log(`App Demo Studio worker listening on http://${config.host}:${config.port}`);
+  console.log(`Lumiveo worker listening on http://${config.host}:${config.port}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -21,6 +21,14 @@ export async function resolveWorkerEndpoint() {
     console.log("resolveWorkerEndpoint: bridge window.zero is unavailable. Keeping default values:", workerUrl, workerToken);
     return;
   }
+  // In development, the concurrently-spawned local dev worker uses "dev-local".
+  // The native bridge window.zero reports a newly-generated token, but that token
+  // is only valid for the production bundled-worker spawned by main.zig.
+  // In dev environments, we force workerToken to match the dev worker: "dev-local".
+  if (import.meta.env.DEV) {
+    console.log("resolveWorkerEndpoint: DEV mode detected. Keeping local dev token:", workerToken);
+    return;
+  }
   try {
     const info = (await bridge.invoke("app.workerInfo", {})) as {
       url?: string;
@@ -38,20 +46,30 @@ export async function resolveWorkerEndpoint() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${workerUrl}${path}`, {
-    ...init,
-    headers: {
-      "x-app-token": workerToken,
-      ...(init?.body && !(init.body instanceof Blob) ? { "content-type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error ?? `request_failed_${response.status}`);
+  const targetUrl = `${workerUrl}${path}`;
+  console.log(`[API Request] Fetching: ${targetUrl} (method: ${init?.method ?? 'GET'})`);
+  try {
+    const response = await fetch(targetUrl, {
+      ...init,
+      headers: {
+        "x-app-token": workerToken,
+        ...(init?.body && !(init.body instanceof Blob) ? { "content-type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    });
+    console.log(`[API Response] Received status ${response.status} from ${targetUrl}`);
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
+      const errMessage = body.error ?? `request_failed_${response.status}`;
+      console.error(`[API Error] Request failed on ${targetUrl}:`, errMessage);
+      throw new Error(errMessage);
+    }
+    if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  } catch (err) {
+    console.error(`[API Network Error] Connection to ${targetUrl} failed:`, err);
+    throw err;
   }
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
 }
 
 export const api = {

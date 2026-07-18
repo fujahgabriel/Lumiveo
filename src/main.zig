@@ -19,6 +19,7 @@ const builtin_commands = [_]native_sdk.BridgeCommandPolicy{
     .{ .name = "native-sdk.dialog.openFile", .origins = &dev_origins },
     .{ .name = "native-sdk.dialog.saveFile", .origins = &dev_origins },
     .{ .name = "native-sdk.dialog.showMessage", .origins = &dev_origins },
+    .{ .name = "native-sdk.webview.toggleDevTools", .origins = &dev_origins },
 };
 
 const App = struct {
@@ -33,7 +34,7 @@ const App = struct {
     fn app(self: *@This()) native_sdk.App {
         return .{
             .context = self,
-            .name = "app-demo-studio",
+            .name = "lumiveo",
             .source = native_sdk.frontend.productionSource(.{ .dist = "frontend/dist" }),
             .source_fn = source,
             .start_fn = start,
@@ -161,9 +162,9 @@ pub fn main(init: std.process.Init) !void {
     };
     app.generateToken();
     try runner.runWithOptions(app.app(), .{
-        .app_name = "App Demo Studio",
-        .window_title = "App Demo Studio",
-        .bundle_id = "com.appdemostudio.app",
+        .app_name = "Lumiveo",
+        .window_title = "Lumiveo",
+        .bundle_id = "com.lumiveo.app",
         .icon_path = "assets/icon.png",
         .bridge = app.bridgeDispatcher(),
         .builtin_bridge = .{ .enabled = true, .commands = &builtin_commands },

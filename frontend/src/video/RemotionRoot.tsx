@@ -7,8 +7,8 @@ const defaultProps: VideoProps = {
   project: {
     schemaVersion: 1,
     id: "00000000-0000-4000-8000-000000000000",
-    title: "App Demo",
-    productName: "App Demo",
+    title: "Lumiveo project",
+    productName: "Lumiveo",
     productDescription: "",
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),

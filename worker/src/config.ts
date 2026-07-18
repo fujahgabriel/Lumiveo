@@ -5,7 +5,7 @@ const defaultDataDir = join(
   homedir(),
   "Library",
   "Application Support",
-  "App Demo Studio",
+  "Lumiveo",
 );
 
 function arg(name: string) {

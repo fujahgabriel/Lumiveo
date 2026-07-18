@@ -1,7 +1,7 @@
 .{
-    .id = "com.appdemostudio.app",
-    .name = "app-demo-studio",
-    .display_name = "App Demo Studio",
+    .id = "com.lumiveo.app",
+    .name = "lumiveo",
+    .display_name = "Lumiveo",
     .description = "Turn app screenshots and recordings into polished, localised demo videos.",
     .version = "0.1.0",
     .icons = .{ "assets/icon.png" },
@@ -14,6 +14,7 @@
             .{ .name = "app.new", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
             .{ .name = "app.save", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
             .{ .name = "native-sdk.dialog.openFile", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+            .{ .name = "native-sdk.webview.toggleDevTools", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
         },
     },
     .menus = .{
@@ -22,6 +23,12 @@
             .items = .{
                 .{ .label = "New Project", .command = "app.new", .key = "n", .modifiers = .{ "command" } },
                 .{ .label = "Save", .command = "app.save", .key = "s", .modifiers = .{ "command" } },
+            },
+        },
+        .{
+            .title = "Developer",
+            .items = .{
+                .{ .label = "Toggle Developer Tools", .command = "native-sdk.webview.toggleDevTools", .key = "i", .modifiers = .{ "command", "option" } },
             },
         },
     },
@@ -46,6 +53,6 @@
     .web_engine = "system",
     .cef = .{ .dir = "third_party/cef/macos", .auto_install = false },
     .windows = .{
-        .{ .label = "main", .title = "App Demo Studio", .width = 1440, .height = 900, .restore_state = true },
+        .{ .label = "main", .title = "Lumiveo", .width = 1440, .height = 900, .restore_state = true },
     },
 }
