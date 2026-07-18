@@ -1,0 +1,51 @@
+.{
+    .id = "com.appdemostudio.app",
+    .name = "app-demo-studio",
+    .display_name = "App Demo Studio",
+    .description = "Turn app screenshots and recordings into polished, localised demo videos.",
+    .version = "0.1.0",
+    .icons = .{ "assets/icon.png" },
+    .platforms = .{ "macos" },
+    .permissions = .{},
+    .capabilities = .{ "webview", "js_bridge", "dialogs", "devtools" },
+    .bridge = .{
+        .commands = .{
+            .{ .name = "app.workerInfo", .origins = .{ "zero://app", "zero://inline", "http://127.0.0.1:5173", "http://127.0.0.1:4817", "http://localhost:4817" } },
+            .{ .name = "app.new", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+            .{ .name = "app.save", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+            .{ .name = "native-sdk.dialog.openFile", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+        },
+    },
+    .menus = .{
+        .{
+            .title = "File",
+            .items = .{
+                .{ .label = "New Project", .command = "app.new", .key = "n", .modifiers = .{ "command" } },
+                .{ .label = "Save", .command = "app.save", .key = "s", .modifiers = .{ "command" } },
+            },
+        },
+    },
+
+    .frontend = .{
+        .dist = "frontend/dist",
+        .entry = "index.html",
+        .spa_fallback = true,
+        .dev = .{
+            .url = "http://127.0.0.1:5173/",
+            .command = .{ "npm", "--prefix", "frontend", "run", "dev", "--", "--host", "127.0.0.1" },
+            .ready_path = "/",
+            .timeout_ms = 30000,
+        },
+    },
+    .security = .{
+        .navigation = .{
+            .allowed_origins = .{ "zero://app", "http://127.0.0.1:5173", "http://127.0.0.1:4817", "http://localhost:4817" },
+            .external_links = .{ .action = "deny" },
+        },
+    },
+    .web_engine = "system",
+    .cef = .{ .dir = "third_party/cef/macos", .auto_install = false },
+    .windows = .{
+        .{ .label = "main", .title = "App Demo Studio", .width = 1440, .height = 900, .restore_state = true },
+    },
+}

@@ -1,0 +1,133 @@
+export type MediaType = "image" | "video" | "audio" | "gif";
+export type ExportPreset = "portrait" | "landscape" | "square";
+export type ExportFormat = "mp4" | "gif" | "png-sequence";
+
+export interface LocaleTrack {
+  code: string;
+  label: string;
+  direction: "ltr" | "rtl";
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  fileName: string;
+  mimeType: string;
+  mediaType: MediaType;
+  size: number;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  createdAt: string;
+}
+
+export interface SceneCopy {
+  caption: string;
+  narration: string;
+  manuallyEdited: boolean;
+  stale: boolean;
+}
+
+export interface Scene {
+  id: string;
+  name: string;
+  assetId: string | null;
+  durationInFrames: number;
+  transition: "none" | "fade" | "slide" | "scale";
+  layout: "device" | "full" | "split";
+  background: string;
+  accent: string;
+  copy: Record<string, SceneCopy>;
+}
+
+export interface Project {
+  schemaVersion: 1;
+  id: string;
+  title: string;
+  productName: string;
+  productDescription: string;
+  createdAt: string;
+  updatedAt: string;
+  fps: number;
+  sourceLocale: string;
+  activeLocale: string;
+  locales: LocaleTrack[];
+  assets: Asset[];
+  scenes: Scene[];
+  generationHistory: Array<{
+    id: string;
+    createdAt: string;
+    provider: string;
+    model: string;
+    operation: "storyboard" | "scene" | "translation" | "voiceover";
+    locale?: string;
+    sceneIds: string[];
+    accepted: boolean;
+  }>;
+}
+
+export interface AppSettings {
+  onboardingComplete: boolean;
+  uiLocale: string;
+  analyticsEnabled: boolean;
+  analyticsProvider: "none" | "posthog" | "firebase";
+  ai: {
+    provider: "local" | "eve" | "openai" | "anthropic" | "google" | "custom";
+    model: string;
+    endpoint: string;
+    hasCredential: boolean;
+  };
+  tts: {
+    provider: "none" | "elevenlabs";
+    voiceId: string;
+    hasCredential: boolean;
+  };
+}
+
+export interface ProjectListItem {
+  id: string;
+  title: string;
+  path: string;
+  created_at: string;
+  updated_at: string;
+  last_opened_at: string;
+}
+
+export interface RenderJob {
+  id: string;
+  project_id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  request_json: string;
+  progress: number;
+  output_path: string | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoryboardProposal {
+  id: string;
+  provider: string;
+  model: string;
+  locale: string;
+  operation: "storyboard" | "translation";
+  summary: string;
+  scenes: Array<{
+    sourceSceneId: string | null;
+    assetId: string | null;
+    name: string;
+    caption: string;
+    narration: string;
+    durationSeconds: number;
+    layout: "device" | "full" | "split";
+    transition: "none" | "fade" | "slide" | "scale";
+  }>;
+}
+
+export interface VideoProps extends Record<string, unknown> {
+  project: Project;
+  locale: string;
+  preset: ExportPreset;
+  assetBaseUrl: string;
+  workerToken: string;
+}
