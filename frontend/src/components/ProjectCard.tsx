@@ -1,4 +1,4 @@
-import { Pencil, Trash2, History, LoaderCircle } from "lucide-react";
+import { Pencil, Trash2, History, LoaderCircle, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ProjectListItem } from "../types";
 import { api } from "../api";
@@ -10,6 +10,7 @@ export function ProjectCard({
   onDelete,
   onRename,
   onRestore,
+  onExport,
 }: {
   item: ProjectListItem;
   active: boolean;
@@ -17,6 +18,7 @@ export function ProjectCard({
   onDelete: () => void;
   onRename: (title: string) => void | Promise<void>;
   onRestore: (versionId: string) => void | Promise<void>;
+  onExport: () => void | Promise<void>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
@@ -139,6 +141,17 @@ export function ProjectCard({
         <div style={{ display: "flex", gap: "4px" }}>
           <button className="quiet-button" type="button" onClick={() => setIsEditing(true)} title="Rename">
             <Pencil size={13} />
+          </button>
+          <button
+            className="quiet-button"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              void onExport();
+            }}
+            title="Export project archive (.lumiveo)"
+          >
+            <Download size={13} />
           </button>
           <button
             className="quiet-button"

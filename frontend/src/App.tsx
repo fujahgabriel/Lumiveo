@@ -1385,6 +1385,34 @@ export default function App() {
               showNotice("Failed to restore selected revision.");
             }
           }}
+          onExport={async (id, title) => {
+            const bridge = (window as any).zero;
+            showNotice(`Compiling assets and compressing "${title}"...`);
+            try {
+              // Step 1: Zip to temp file
+              const { tempPath } = await api.exportProjectTemp(id);
+              
+              // Step 2: Open native Save Dialog now that the archive is ready
+              const safeTitle = title.replace(/[\/\\?%*:|"<>\s]/g, "-").trim();
+              const targetPath = (await bridge?.invoke("native-sdk.dialog.saveFile", {
+                title: `Export ${title}`,
+                defaultName: `${safeTitle}.lumiveo`,
+              })) as string | null;
+              
+              if (!targetPath) {
+                // User cancelled: cleanup temp file
+                await api.cleanupTempFile(tempPath).catch(() => {});
+                return;
+              }
+              
+              // Step 3: Copy to final destination and reveal
+              await api.finalizeExport(tempPath, targetPath);
+              showNotice(`Successfully exported "${title}"!`);
+              void api.revealPath(targetPath);
+            } catch {
+              showNotice(`Failed to export "${title}"`);
+            }
+          }}
           onCreateNew={() => {
             setShowProjectHistoryModal(false);
             setModal("wizard");

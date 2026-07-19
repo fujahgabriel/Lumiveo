@@ -56,6 +56,7 @@ export function SettingsPage({
   const [busy, setBusy] = useState(false);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "fail">("idle");
   const [exportedPath, setExportedPath] = useState<string | null>(null);
+  const [exportLogs, setExportLogs] = useState<string[]>([]);
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [ttsTestStatus, setTtsTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -104,21 +105,53 @@ export function SettingsPage({
 
   const bridge = (window as Window & { zero?: { invoke: (cmd: string, payload: unknown) => Promise<unknown> } }).zero;
 
+  const addExportLog = (msg: string) => {
+    setExportLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
   const handleExport = async () => {
+    if (!project) {
+      showNotice("Load or create a project first to export.");
+      return;
+    }
+    setBusy(true);
+    setExportState("exporting");
+    setExportedPath(null);
+    setExportLogs([]);
+    addExportLog(`Initializing export for project: "${project.title}"`);
     try {
-      const defaultName = project ? `${project.title}.lumiveo` : "project-export.lumiveo";
-      const result = (await bridge?.invoke("native-sdk.dialog.saveFile", {
-        title: "Export project",
+      // Step 1: Tell backend to zip the project to a temp file
+      addExportLog("Compiling project files and copying active assets...");
+      const { tempPath } = await api.exportProjectTemp(project.id);
+      addExportLog("ZIP compression succeeded! Temporary archive compiled.");
+      
+      // Step 2: Open native Save Dialog now that the archive is ready!
+      addExportLog("Awaiting save location selector from Finder...");
+      const safeTitle = project.title.replace(/[\/\\?%*:|"<>\s]/g, "-").trim();
+      const defaultName = `${safeTitle}.lumiveo`;
+      const targetPath = (await bridge?.invoke("native-sdk.dialog.saveFile", {
+        title: "Save Project Archive",
         defaultName,
-      })) as { path?: string } | undefined;
-      if (!result?.path || !project) return;
-      setBusy(true);
-      setExportState("exporting");
-      setExportedPath(null);
-      await api.exportProject(project.id, result.path);
-      setExportedPath(result.path);
+      })) as string | null;
+      
+      if (!targetPath) {
+        // User cancelled the save dialog: cleanly cancel and clear temp file
+        addExportLog("Export cancelled by user. Cleaning up temp files.");
+        await api.cleanupTempFile(tempPath).catch(() => {});
+        setExportState("idle");
+        return;
+      }
+      
+      addExportLog(`Save destination confirmed: "${targetPath}"`);
+      addExportLog("Writing final .lumiveo archive to selected directory...");
+      // Step 3: Tell backend to copy/finalize the temp file to their chosen destination
+      await api.finalizeExport(tempPath, targetPath);
+      addExportLog("Archive written successfully! Export completed.");
+      
+      setExportedPath(targetPath);
       setExportState("done");
-    } catch {
+    } catch (err: any) {
+      addExportLog(`Error: ${err?.message || "Export failed"}`);
       setExportState("fail");
     } finally {
       setBusy(false);
@@ -451,7 +484,13 @@ export function SettingsPage({
           <div className="settings-section">
             <h3>Projects</h3>
             <div className="project-actions">
-              <button className="quiet-button" type="button" disabled={busy} onClick={handleExport}>
+              <button
+                className="quiet-button"
+                type="button"
+                disabled={busy || !project}
+                onClick={handleExport}
+                title={!project ? "Load or create a project first to export" : "Export current project as a portable archive"}
+              >
                 <Download size={13} /> Export project
               </button>
               <button className="quiet-button" type="button" disabled={busy} onClick={handleImport}>
@@ -521,11 +560,36 @@ export function SettingsPage({
           subtitle={project ? `Archiving "${project.title}"` : "Archiving project"}
           onClose={() => setExportState("idle")}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px 0", textAlign: "center", alignItems: "center" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px 0", textAlign: "center", alignItems: "center", width: "100%" }}>
             {exportState === "exporting" ? (
               <>
                 <LoaderCircle className="spin" size={32} style={{ color: "var(--accent)" }} />
                 <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Compiling assets and compressing project archive…</strong>
+                
+                {/* Live Console Logs UI */}
+                <div style={{
+                  marginTop: "8px",
+                  width: "100%",
+                  maxHeight: "140px",
+                  background: "#121210",
+                  border: "1px solid #2d2d26",
+                  borderRadius: "6px",
+                  padding: "10px",
+                  textAlign: "left",
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                  color: "#d4d4cb",
+                  overflowY: "auto",
+                  lineHeight: "1.4",
+                  boxSizing: "border-box"
+                }}>
+                  {exportLogs.map((log, idx) => (
+                    <div key={idx} style={{ color: log.includes("Error") || log.includes("failed") ? "#ff6b6b" : log.includes("succeeded") || log.includes("successfully") || log.includes("completed") ? "#9be9a8" : "#d4d4cb", marginBottom: "3px" }}>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+                
                 <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)" }}>Please keep {APP_NAME} open. Writing `.lumiveo` bundle to your disk.</p>
               </>
             ) : exportState === "done" ? (
@@ -534,6 +598,31 @@ export function SettingsPage({
                   <Check size={20} strokeWidth={3} />
                 </div>
                 <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Project Exported Successfully!</strong>
+                
+                {/* Summary Console logs */}
+                <div style={{
+                  marginTop: "8px",
+                  width: "100%",
+                  maxHeight: "100px",
+                  background: "#121210",
+                  border: "1px solid #2d2d26",
+                  borderRadius: "6px",
+                  padding: "10px",
+                  textAlign: "left",
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                  color: "#d4d4cb",
+                  overflowY: "auto",
+                  lineHeight: "1.4",
+                  boxSizing: "border-box"
+                }}>
+                  {exportLogs.map((log, idx) => (
+                    <div key={idx} style={{ color: log.includes("Error") || log.includes("failed") ? "#ff6b6b" : log.includes("succeeded") || log.includes("successfully") || log.includes("completed") ? "#9be9a8" : "#d4d4cb", marginBottom: "3px" }}>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+
                 <code style={{ fontSize: "11px", color: "var(--text-3)", background: "var(--bg-1)", padding: "6px 12px", borderRadius: "4px", maxWidth: "100%", wordBreak: "break-all" }}>
                   {exportedPath}
                 </code>
@@ -560,6 +649,31 @@ export function SettingsPage({
               <>
                 <CircleAlert size={32} style={{ color: "#ff6b6b" }} />
                 <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Export Failed</strong>
+                
+                {/* Fail Console logs */}
+                <div style={{
+                  marginTop: "8px",
+                  width: "100%",
+                  maxHeight: "100px",
+                  background: "#121210",
+                  border: "1px solid #2d2d26",
+                  borderRadius: "6px",
+                  padding: "10px",
+                  textAlign: "left",
+                  fontFamily: "monospace",
+                  fontSize: "11px",
+                  color: "#d4d4cb",
+                  overflowY: "auto",
+                  lineHeight: "1.4",
+                  boxSizing: "border-box"
+                }}>
+                  {exportLogs.map((log, idx) => (
+                    <div key={idx} style={{ color: log.includes("Error") || log.includes("failed") ? "#ff6b6b" : log.includes("succeeded") || log.includes("successfully") || log.includes("completed") ? "#9be9a8" : "#d4d4cb", marginBottom: "3px" }}>
+                      {log}
+                    </div>
+                  ))}
+                </div>
+
                 <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)" }}>Failed to write compressed archive to destination path.</p>
                 <button
                   className="primary-button"

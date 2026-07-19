@@ -12,6 +12,7 @@ export function ProjectHistoryModal({
   onDelete,
   onRename,
   onRestore,
+  onExport,
   onCreateNew,
   onRefresh,
 }: {
@@ -22,6 +23,7 @@ export function ProjectHistoryModal({
   onDelete: (id: string) => void | Promise<void>;
   onRename: (id: string, title: string) => void | Promise<void>;
   onRestore: (id: string, versionId: string) => void | Promise<void>;
+  onExport: (id: string, title: string) => void | Promise<void>;
   onCreateNew: () => void;
   onRefresh?: () => void | Promise<void>;
 }) {
@@ -67,6 +69,7 @@ export function ProjectHistoryModal({
                 onDelete={() => void onDelete(item.id)}
                 onRename={(title) => onRename(item.id, title)}
                 onRestore={(versionId) => onRestore(item.id, versionId)}
+                onExport={() => onExport(item.id, item.title)}
               />
             ))}
           </div>

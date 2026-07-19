@@ -128,6 +128,12 @@ export const api = {
     request<Project>(`/v1/projects/${projectId}/versions/${versionId}/restore`, { method: "POST" }),
   revealPath: (path: string) =>
     request<{ ok: boolean }>("/v1/system/reveal", { method: "POST", body: JSON.stringify({ path }) }),
+  exportProjectTemp: (projectId: string) =>
+    request<{ tempPath: string }>(`/v1/projects/${projectId}/export-temp`, { method: "POST" }),
+  finalizeExport: (tempPath: string, targetPath: string) =>
+    request<{ path: string }>("/v1/projects/export-finalize", { method: "POST", body: JSON.stringify({ tempPath, targetPath }) }),
+  cleanupTempFile: (tempPath: string) =>
+    request<{ cleaned: boolean }>("/v1/projects/export-cleanup", { method: "POST", body: JSON.stringify({ tempPath }) }),
   testAiConnection: () =>
     request<{ ok: boolean }>("/v1/settings/ai/test", { method: "POST" }),
   testTtsConnection: () =>

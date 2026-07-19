@@ -161,6 +161,23 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 200, await projects.exportProject(input.projectId, input.targetPath));
     return;
   }
+  const exportTempMatch = url.pathname.match(/^\/v1\/projects\/([0-9a-f-]+)\/export-temp$/i);
+  if (exportTempMatch && request.method === "POST") {
+    json(response, 200, await projects.exportProjectTemp(exportTempMatch[1]));
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/projects/export-finalize") {
+    const input = (await readJson(request)) as { tempPath?: string; targetPath?: string };
+    if (!input.tempPath || !input.targetPath) throw new Error("invalid_request");
+    json(response, 200, await projects.finalizeExport(input.tempPath, input.targetPath));
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/projects/export-cleanup") {
+    const input = (await readJson(request)) as { tempPath?: string };
+    if (!input.tempPath) throw new Error("invalid_request");
+    json(response, 200, await projects.cleanupTempFile(input.tempPath));
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/v1/projects/import") {
     const input = (await readJson(request)) as { sourcePath?: string };
     if (!input.sourcePath) throw new Error("invalid_request");
