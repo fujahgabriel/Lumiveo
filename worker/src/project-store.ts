@@ -1,6 +1,6 @@
 import { createWriteStream } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile, unlink } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import type { IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { execFile } from "node:child_process";
@@ -153,12 +153,90 @@ export class ProjectStore {
       }
     }
     
+    // Ensure parent directory for target zip file exists
+    await mkdir(dirname(targetZipPath), { recursive: true }).catch(() => {});
+
     // Compress the temp directory into target zip path using macOS ditto
     await execFileAsync("/usr/bin/ditto", ["-c", "-k", tempDir, targetZipPath]);
     
     // Clean up temp dir
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     return { path: targetZipPath };
+  }
+
+  async exportProjectTemp(projectId: string) {
+    console.log(`\n=== [Export Temp] Starting export for project ID: ${projectId} ===`);
+    const row = this.requireRow(projectId);
+    console.log(`[Export Temp] Source project path on disk: "${row.path}"`);
+    
+    const tempDir = join("/tmp", `export-dir-${crypto.randomUUID()}`);
+    const tempZipPath = join("/tmp", `export-file-${crypto.randomUUID()}.lumiveo`);
+    await mkdir(tempDir, { recursive: true });
+    console.log(`[Export Temp] Created temp directory: "${tempDir}"`);
+    console.log(`[Export Temp] Target temp ZIP file: "${tempZipPath}"`);
+    
+    // Copy manifest
+    const manifestSrc = join(row.path, "project.json");
+    const manifestDst = join(tempDir, "project.json");
+    console.log(`[Export Temp] Copying manifest from "${manifestSrc}" to "${manifestDst}"`);
+    await copyFile(manifestSrc, manifestDst);
+    
+    // Copy assets
+    const assetsDir = join(row.path, "assets");
+    const assets = await readdir(assetsDir).catch(() => [] as string[]);
+    console.log(`[Export Temp] Found ${assets.length} assets inside "${assetsDir}"`);
+    if (assets.length > 0) {
+      const tempAssetsDir = join(tempDir, "assets");
+      await mkdir(tempAssetsDir, { recursive: true });
+      for (const file of assets) {
+        const assetSrc = join(assetsDir, file);
+        const assetDst = join(tempAssetsDir, file);
+        console.log(`[Export Temp] -> Copying asset: "${file}"`);
+        await copyFile(assetSrc, assetDst);
+      }
+    }
+    
+    // Compress into temp zip file using ditto
+    console.log(`[Export Temp] Compressing directory via macOS ditto...`);
+    await execFileAsync("/usr/bin/ditto", ["-c", "-k", tempDir, tempZipPath]);
+    console.log(`[Export Temp] Compression finished! ZIP created successfully at: "${tempZipPath}"`);
+    
+    // Clean up temp dir
+    console.log(`[Export Temp] Cleaning up temporary directory...`);
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    console.log(`=== [Export Temp] Temp export compilation completed successfully ===\n`);
+    
+    return { tempPath: tempZipPath };
+  }
+
+  async finalizeExport(tempPath: string, targetPath: string) {
+    console.log(`\n=== [Export Finalize] Writing file to final destination ===`);
+    console.log(`[Export Finalize] Source temporary ZIP: "${tempPath}"`);
+    console.log(`[Export Finalize] Selected target path: "${targetPath}"`);
+    
+    const targetParent = dirname(targetPath);
+    console.log(`[Export Finalize] Ensuring parent folder exists: "${targetParent}"`);
+    await mkdir(targetParent, { recursive: true }).catch((err) => {
+      console.error(`[Export Finalize] Warning during folder creation:`, err);
+    });
+    
+    console.log(`[Export Finalize] Copying compressed archive to destination...`);
+    await copyFile(tempPath, targetPath);
+    console.log(`[Export Finalize] File copied successfully!`);
+    
+    console.log(`[Export Finalize] Purging temporary ZIP file...`);
+    await unlink(tempPath).catch((err) => {
+      console.error(`[Export Finalize] Warning purging temp file:`, err);
+    });
+    
+    console.log(`=== [Export Finalize] Project exported successfully! ===\n`);
+    return { path: targetPath };
+  }
+
+  async cleanupTempFile(tempPath: string) {
+    console.log(`[Export Cleanup] Purging unused temporary file: "${tempPath}"`);
+    await unlink(tempPath).catch(() => {});
+    return { cleaned: true };
   }
 
   async importProject(sourceZipPath: string) {
