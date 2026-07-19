@@ -13,6 +13,7 @@ import { KeyLink, ModelPicker } from "../ModelPicker";
 import { providerMeta, providerOrder, ttsKeyUrl } from "../providers";
 import type { AppSettings, Project } from "../types";
 import { Switch } from "../Switch";
+import { ModalFrame } from "./ModalFrame";
 import {
   APP_NAME,
   APP_NAME_UPPER,
@@ -53,6 +54,8 @@ export function SettingsPage({
   const [cacheSize, setCacheSize] = useState<string>("Calculating...");
   const [systemPaths, setSystemPaths] = useState<{ dataDir: string; projectRoot: string; outputRoot: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "fail">("idle");
+  const [exportedPath, setExportedPath] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [ttsTestStatus, setTtsTestStatus] = useState<"idle" | "testing" | "ok" | "fail">("idle");
   const [confirmClear, setConfirmClear] = useState(false);
@@ -110,10 +113,13 @@ export function SettingsPage({
       })) as { path?: string } | undefined;
       if (!result?.path || !project) return;
       setBusy(true);
+      setExportState("exporting");
+      setExportedPath(null);
       await api.exportProject(project.id, result.path);
-      showNotice("Project exported.");
+      setExportedPath(result.path);
+      setExportState("done");
     } catch {
-      showNotice("Export failed.");
+      setExportState("fail");
     } finally {
       setBusy(false);
     }
@@ -508,6 +514,66 @@ export function SettingsPage({
           </button>
         </div>
       </div>
+
+      {exportState !== "idle" && (
+        <ModalFrame
+          title="Project Export"
+          subtitle={project ? `Archiving "${project.title}"` : "Archiving project"}
+          onClose={() => setExportState("idle")}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px 0", textAlign: "center", alignItems: "center" }}>
+            {exportState === "exporting" ? (
+              <>
+                <LoaderCircle className="spin" size={32} style={{ color: "var(--accent)" }} />
+                <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Compiling assets and compressing project archive…</strong>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)" }}>Please keep {APP_NAME} open. Writing `.lumiveo` bundle to your disk.</p>
+              </>
+            ) : exportState === "done" ? (
+              <>
+                <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "var(--accent)", color: "#000", display: "grid", placeItems: "center" }}>
+                  <Check size={20} strokeWidth={3} />
+                </div>
+                <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Project Exported Successfully!</strong>
+                <code style={{ fontSize: "11px", color: "var(--text-3)", background: "var(--bg-1)", padding: "6px 12px", borderRadius: "4px", maxWidth: "100%", wordBreak: "break-all" }}>
+                  {exportedPath}
+                </code>
+                <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => {
+                      if (exportedPath) void api.revealPath(exportedPath);
+                    }}
+                  >
+                    Show in Finder
+                  </button>
+                  <button
+                    className="quiet-button"
+                    type="button"
+                    onClick={() => setExportState("idle")}
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <CircleAlert size={32} style={{ color: "#ff6b6b" }} />
+                <strong style={{ fontSize: "14px", color: "var(--text-1)" }}>Export Failed</strong>
+                <p style={{ margin: 0, fontSize: "12px", color: "var(--text-3)" }}>Failed to write compressed archive to destination path.</p>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => setExportState("idle")}
+                  style={{ marginTop: "12px" }}
+                >
+                  Close
+                </button>
+              </>
+            )}
+          </div>
+        </ModalFrame>
+      )}
     </div>
   );
 }

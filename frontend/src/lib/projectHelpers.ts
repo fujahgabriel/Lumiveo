@@ -58,6 +58,7 @@ export function addScene(
     mediaY: 50,
     devicePreset: "iphone-6.7",
     voiceId: null,
+    textTransition: "fade",
   };
   updateProject((current) => ({ ...current, scenes: [...current.scenes, scene] }));
   select(id);

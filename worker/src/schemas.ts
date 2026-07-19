@@ -54,6 +54,7 @@ export const sceneSchema = z.object({
   mediaY: z.number().int().min(0).max(100).default(50),
   devicePreset: z.string().default("iphone-6.7"),
   voiceId: z.string().nullable().default(null),
+  textTransition: z.enum(["fade", "typewriter", "slide", "bounce", "breathe"]).default("fade"),
 });
 
 export const generationRecordSchema = z.object({
@@ -82,6 +83,11 @@ export const projectSchema = z.object({
   assets: z.array(assetSchema),
   scenes: z.array(sceneSchema).min(1).max(200),
   generationHistory: z.array(generationRecordSchema).default([]),
+  backgroundAudioId: z.string().uuid().nullable().default(null),
+  backgroundAudioUrl: z.string().nullable().default(null),
+  backgroundAudioVolume: z.number().min(0).max(1).default(0.15),
+  backgroundAudioFadeIn: z.number().min(0).max(10).default(1),
+  backgroundAudioFadeOut: z.number().min(0).max(10).default(1),
 });
 
 export const appSettingsSchema = z.object({

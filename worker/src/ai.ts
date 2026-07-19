@@ -186,6 +186,7 @@ export class AiService {
         mediaY: project.scenes[index]?.mediaY ?? 50,
         devicePreset: project.scenes[index]?.devicePreset ?? "iphone-6.7",
         voiceId: project.scenes[index]?.voiceId ?? null,
+        textTransition: project.scenes[index]?.textTransition ?? "fade",
       }));
     }
     const locales = project.locales.some((entry) => entry.code === locale)

@@ -3,9 +3,13 @@ import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile, unlink
 import { basename, extname, join } from "node:path";
 import type { IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { AppDatabase } from "./db.js";
 import { config } from "./config.js";
 import { createProject, projectSchema, type Project } from "./schemas.js";
+
+const execFileAsync = promisify(execFile);
 
 interface ProjectRow {
   id: string;
@@ -133,28 +137,48 @@ export class ProjectStore {
     return { deleted: rows.length };
   }
 
-  async exportProject(projectId: string, targetDir: string) {
+  async exportProject(projectId: string, targetZipPath: string) {
     const row = this.requireRow(projectId);
-    await mkdir(targetDir, { recursive: true });
-    await copyFile(join(row.path, "project.json"), join(targetDir, "project.json"));
+    const tempDir = join("/tmp", `export-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    
+    // Copy manifest and assets to temp directory
+    await copyFile(join(row.path, "project.json"), join(tempDir, "project.json"));
     const assetsDir = join(row.path, "assets");
     const assets = await readdir(assetsDir).catch(() => [] as string[]);
     if (assets.length > 0) {
-      await mkdir(join(targetDir, "assets"), { recursive: true });
+      await mkdir(join(tempDir, "assets"), { recursive: true });
       for (const file of assets) {
-        await copyFile(join(assetsDir, file), join(targetDir, "assets", file));
+        await copyFile(join(assetsDir, file), join(tempDir, "assets", file));
       }
     }
-    return { path: targetDir };
+    
+    // Compress the temp directory into target zip path using macOS ditto
+    await execFileAsync("/usr/bin/ditto", ["-c", "-k", tempDir, targetZipPath]);
+    
+    // Clean up temp dir
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    return { path: targetZipPath };
   }
 
-  async importProject(sourceDir: string) {
-    const raw = await readFile(join(sourceDir, "project.json"), "utf8");
+  async importProject(sourceZipPath: string) {
+    const tempDir = join("/tmp", `import-${crypto.randomUUID()}`);
+    await mkdir(tempDir, { recursive: true });
+    
+    // Extract zip archive using ditto
+    await execFileAsync("/usr/bin/ditto", ["-x", "-k", sourceZipPath, tempDir]);
+    
+    // Read manifest to get project ID
+    const raw = await readFile(join(tempDir, "project.json"), "utf8");
     const project = projectSchema.parse(JSON.parse(raw));
+    
     const targetPath = join(config.projectRoot, `${project.id}.lumiveo`);
+    await rm(targetPath, { recursive: true, force: true }).catch(() => {});
     await mkdir(targetPath, { recursive: true });
-    await copyFile(join(sourceDir, "project.json"), join(targetPath, "project.json"));
-    const sourceAssets = join(sourceDir, "assets");
+    
+    // Copy files back
+    await copyFile(join(tempDir, "project.json"), join(targetPath, "project.json"));
+    const sourceAssets = join(tempDir, "assets");
     const files = await readdir(sourceAssets).catch(() => [] as string[]);
     if (files.length > 0) {
       await mkdir(join(targetPath, "assets"), { recursive: true });
@@ -162,6 +186,10 @@ export class ProjectStore {
         await copyFile(join(sourceAssets, file), join(targetPath, "assets", file));
       }
     }
+    
+    // Clean up temp dir
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    
     this.upsertIndex(project, targetPath);
     return project;
   }

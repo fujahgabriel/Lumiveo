@@ -126,6 +126,8 @@ export const api = {
     request<{ versions: Array<{ id: string; timestamp: string; size: number }> }>(`/v1/projects/${projectId}/versions`),
   restoreProjectVersion: (projectId: string, versionId: string) =>
     request<Project>(`/v1/projects/${projectId}/versions/${versionId}/restore`, { method: "POST" }),
+  revealPath: (path: string) =>
+    request<{ ok: boolean }>("/v1/system/reveal", { method: "POST", body: JSON.stringify({ path }) }),
   testAiConnection: () =>
     request<{ ok: boolean }>("/v1/settings/ai/test", { method: "POST" }),
   testTtsConnection: () =>

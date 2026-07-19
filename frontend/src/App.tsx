@@ -178,6 +178,7 @@ export default function App() {
   const [renderJob, setRenderJob] = useState<RenderJob | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -258,6 +259,8 @@ export default function App() {
     try {
       const nextProject = await api.project(id);
       setProject(nextProject);
+      const date = new Date(nextProject.updatedAt);
+      setLastSavedTime(Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString());
       if (nextProject.scenes && nextProject.scenes.length > 0) {
         setSelectedSceneId(nextProject.scenes[0].id);
       } else {
@@ -346,6 +349,8 @@ export default function App() {
       const saved = await api.saveProject(project);
       setProject(saved);
       setDirty(false);
+      const date = new Date(saved.updatedAt);
+      setLastSavedTime(Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString());
       showNotice("Changes synced and saved to disk.");
     } catch (err: any) {
       console.error("[Manual Save Error]", err);
@@ -392,6 +397,8 @@ export default function App() {
       
       setSettings(nextSettings);
       setProject(nextProject);
+      const date = new Date(nextProject.updatedAt);
+      setLastSavedTime(Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString());
       if (nextProject.scenes && nextProject.scenes.length > 0) {
         setSelectedSceneId(nextProject.scenes[0].id);
       } else {
@@ -483,6 +490,8 @@ export default function App() {
         if (project.updatedAt === revisionToSave) {
           setProject(saved);
           setDirty(false);
+          const date = new Date(saved.updatedAt);
+          setLastSavedTime(Number.isNaN(date.getTime()) ? new Date().toLocaleTimeString() : date.toLocaleTimeString());
         }
       } catch {
         showNotice("Could not save. Your edits remain in this window.");
@@ -716,7 +725,7 @@ export default function App() {
             ) : (
               <>
                 <Check size={12} style={{ color: "var(--accent)" }} />
-                <span>Saved</span>
+                <span>{lastSavedTime ? `Saved at ${lastSavedTime}` : "Saved"}</span>
                 <button
                   type="button"
                   className="quiet-button"
@@ -1141,7 +1150,16 @@ export default function App() {
                   Italic (I)
                 </button>
               </div>
-              <div className="field" style={{ visibility: "hidden" }} />
+              <label className="field">
+                <span>Animation</span>
+                <select value={selectedScene.textTransition ?? "fade"} onChange={(event) => updateScene((scene) => ({ ...scene, textTransition: event.target.value as any }))}>
+                  <option value="fade">Smooth Fade</option>
+                  <option value="typewriter">Typewriter</option>
+                  <option value="slide">Slide Up (Rise)</option>
+                  <option value="bounce">Bounce Zoom</option>
+                  <option value="breathe">Slow Breathe</option>
+                </select>
+              </label>
             </div>
           </div>
 
@@ -1168,13 +1186,92 @@ export default function App() {
               </label>
 
               <label className="field">
-                <span>Align Vertical (Y: {selectedScene.mediaY ?? 50}%)</span>
-                <input type="range" min={0} max={100} value={selectedScene.mediaY ?? 50} onChange={(event) => updateScene((scene) => ({ ...scene, mediaY: Number(event.target.value) }))} />
-              </label>
-            </div>
+              <span>Align Vertical (Y: {selectedScene.mediaY ?? 50}%)</span>
+              <input type="range" min={0} max={100} value={selectedScene.mediaY ?? 50} onChange={(event) => updateScene((scene) => ({ ...scene, mediaY: Number(event.target.value) }))} />
+            </label>
           </div>
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <h4 style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-3)" }}>Soundtrack</h4>
           
-          <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <label className="field">
+            <span>Background Music</span>
+            <select
+              value={project.backgroundAudioUrl || project.backgroundAudioId || ""}
+              onChange={(event) => {
+                const val = event.target.value;
+                if (!val) {
+                  updateProject((current) => ({ ...current, backgroundAudioUrl: null, backgroundAudioId: null }));
+                } else if (val.startsWith("http")) {
+                  updateProject((current) => ({ ...current, backgroundAudioUrl: val, backgroundAudioId: null }));
+                } else {
+                  updateProject((current) => ({ ...current, backgroundAudioUrl: null, backgroundAudioId: val }));
+                }
+              }}
+            >
+              <option value="">-- No Background Music --</option>
+              <optgroup label="Free Non-Commercial Tracks">
+                <option value="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3">Inspiring Tech (Ambient)</option>
+                <option value="https://assets.mixkit.co/music/preview/mixkit-corporate-culture-1351.mp3">Vibrant Corporate (Acoustic)</option>
+                <option value="https://assets.mixkit.co/music/preview/mixkit-dreaming-big-31.mp3">Dreamy Ambient (Atmospheric)</option>
+                <option value="https://assets.mixkit.co/music/preview/mixkit-sun-and-fun-12.mp3">Playful & Light (Upbeat)</option>
+              </optgroup>
+              {project.assets.filter(a => a.mediaType === "audio" && !a.name.startsWith("voiceover-")).length > 0 && (
+                <optgroup label="Uploaded Custom Music">
+                  {project.assets.filter(a => a.mediaType === "audio" && !a.name.startsWith("voiceover-")).map((asset) => (
+                    <option key={asset.id} value={asset.id}>{asset.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          </label>
+
+          {(project.backgroundAudioUrl || project.backgroundAudioId) && (
+            <>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Music Volume ({Math.round((project.backgroundAudioVolume ?? 0.15) * 100)}%)</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={project.backgroundAudioVolume ?? 0.15}
+                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioVolume: Number(event.target.value) }))}
+                  />
+                </label>
+                <div className="field" style={{ visibility: "hidden" }} />
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>Fade In (sec)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={project.backgroundAudioFadeIn ?? 1}
+                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioFadeIn: Number(event.target.value) }))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Fade Out (sec)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={10}
+                    step={0.5}
+                    value={project.backgroundAudioFadeOut ?? 1}
+                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioFadeOut: Number(event.target.value) }))}
+                  />
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+        
+        <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none" }}>
               <input type="checkbox" checked={selectedScene.showLogo ?? false} onChange={(event) => updateScene((scene) => ({ ...scene, showLogo: event.target.checked }))} />
               <div style={{ display: "flex", flexDirection: "column" }}>

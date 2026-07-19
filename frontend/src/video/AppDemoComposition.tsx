@@ -11,13 +11,29 @@ import {
   useVideoConfig,
 } from "remotion";
 import type { Asset, Scene, VideoProps } from "../types";
-import { presetDimensions } from "./config";
+import { durationFor, presetDimensions } from "./config";
 
 
 export function AppDemoComposition(props: VideoProps) {
   let start = 0;
+  const totalDuration = durationFor(props.project);
+  
+  const bgAudioUrl = props.project.backgroundAudioId
+    ? `${props.assetBaseUrl.replace(/\/$/, "")}/${props.project.backgroundAudioId}?token=${encodeURIComponent(props.workerToken || "")}`
+    : props.project.backgroundAudioUrl || null;
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#11110f" }}>
+      {bgAudioUrl && (
+        <BackgroundAudioTrack
+          src={bgAudioUrl}
+          volume={props.project.backgroundAudioVolume ?? 0.15}
+          fadeInSeconds={props.project.backgroundAudioFadeIn ?? 1}
+          fadeOutSeconds={props.project.backgroundAudioFadeOut ?? 1}
+          fps={props.project.fps}
+          totalDurationInFrames={totalDuration}
+        />
+      )}
       {props.project.scenes.map((scene, index) => {
         const from = start;
         start += scene.durationInFrames;
@@ -88,6 +104,24 @@ function DemoScene({
   const logoUrl = scene.logoAssetId
     ? `${assetBaseUrl.replace(/\/$/, "")}/${scene.logoAssetId}?token=${encodeURIComponent(token)}`
     : null;
+
+  // Canva-style text transitions/animations
+  const charsToShow = Math.floor(
+    interpolate(frame, [0, Math.min(30, scene.durationInFrames)], [0, (copy?.caption ?? scene.name).length], {
+      extrapolateRight: "clamp",
+    })
+  );
+  const renderedCaption = scene.textTransition === "typewriter"
+    ? (copy?.caption ?? scene.name).slice(0, charsToShow)
+    : (copy?.caption ?? scene.name);
+
+  const bounceScale = spring({ frame, fps, config: { damping: 11, stiffness: 130, mass: 0.5 } });
+  const baseScale = scene.textTransition === "bounce" ? bounceScale : 1;
+  const breatheScale = 1 + Math.sin(frame / 40) * 0.02;
+  const finalScale = scene.textTransition === "breathe" ? breatheScale : baseScale;
+
+  const slideY = scene.textTransition === "slide" ? interpolate(entrance, [0, 1], [40, 0]) : 0;
+  const fadeOpacity = scene.textTransition === "fade" ? interpolate(entrance, [0, 1], [0, 1]) : 1;
 
   return (
     <AbsoluteFill
@@ -185,9 +219,12 @@ function DemoScene({
               lineHeight: 1.04,
               letterSpacing: "-0.045em",
               textWrap: "balance",
+              transform: `scale(${finalScale}) translateY(${slideY}px)`,
+              opacity: fadeOpacity,
+              display: "inline-block",
             }}
           >
-            {copy?.caption ?? scene.name}
+            {renderedCaption}
           </div>
         </div>
       </div>
@@ -302,6 +339,45 @@ export const devicePresets: Record<string, { label: string; ratio: string }> = {
   "google-phone": { label: "Google Play Phone", ratio: "1080 / 1920" },
   "google-tablet": { label: "Google Play 10\" Tablet", ratio: "1200 / 1920" },
 };
+
+function BackgroundAudioTrack({
+  src,
+  volume,
+  fadeInSeconds,
+  fadeOutSeconds,
+  fps,
+  totalDurationInFrames,
+}: {
+  src: string;
+  volume: number;
+  fadeInSeconds: number;
+  fadeOutSeconds: number;
+  fps: number;
+  totalDurationInFrames: number;
+}) {
+  const frame = useCurrentFrame();
+  const fadeInFrames = Math.max(0, Math.round(fadeInSeconds * fps));
+  const fadeOutFrames = Math.max(0, Math.round(fadeOutSeconds * fps));
+
+  let currentVolume = volume;
+  if (frame < fadeInFrames && fadeInFrames > 0) {
+    currentVolume = interpolate(frame, [0, fadeInFrames], [0, volume], {
+      extrapolateRight: "clamp",
+    });
+  } else if (frame > totalDurationInFrames - fadeOutFrames && fadeOutFrames > 0) {
+    currentVolume = interpolate(
+      frame,
+      [totalDurationInFrames - fadeOutFrames, totalDurationInFrames],
+      [volume, 0],
+      {
+        extrapolateLeft: "clamp",
+        extrapolateRight: "clamp",
+      }
+    );
+  }
+
+  return <Audio src={src} volume={currentVolume} />;
+}
 
 function AudioPlaceholder({ accent }: { accent: string }) {
   const frame = useCurrentFrame();

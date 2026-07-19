@@ -53,6 +53,7 @@ export interface Scene {
   mediaY?: number;
   devicePreset?: string;
   voiceId?: string | null;
+  textTransition?: "fade" | "typewriter" | "slide" | "bounce" | "breathe";
 }
 
 export interface Project {
@@ -79,6 +80,11 @@ export interface Project {
     sceneIds: string[];
     accepted: boolean;
   }>;
+  backgroundAudioId?: string | null;
+  backgroundAudioUrl?: string | null;
+  backgroundAudioVolume?: number;
+  backgroundAudioFadeIn?: number;
+  backgroundAudioFadeOut?: number;
 }
 
 export interface AppSettings {

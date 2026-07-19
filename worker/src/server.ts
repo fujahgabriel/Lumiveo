@@ -361,6 +361,13 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 200, { ok: true });
     return;
   }
+  if (request.method === "POST" && url.pathname === "/v1/system/reveal") {
+    const input = (await readJson(request)) as { path: string };
+    const { exec } = await import("node:child_process");
+    exec(`open -R "${input.path.replace(/"/g, '\\"')}"`);
+    json(response, 200, { ok: true });
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/v1/tts/voices") {
     try {
       const voices = await tts.listVoices();
