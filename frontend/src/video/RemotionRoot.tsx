@@ -2,13 +2,14 @@ import { Composition, type CalculateMetadataFunction } from "remotion";
 import type { VideoProps } from "../types";
 import { AppDemoComposition } from "./AppDemoComposition";
 import { durationFor, presetDimensions } from "./config";
+import { APP_NAME } from "../lib/constants";
 
 const defaultProps: VideoProps = {
   project: {
     schemaVersion: 1,
     id: "00000000-0000-4000-8000-000000000000",
-    title: "Lumiveo project",
-    productName: "Lumiveo",
+    title: `${APP_NAME} project`,
+    productName: APP_NAME,
     productDescription: "",
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),

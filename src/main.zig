@@ -13,6 +13,9 @@ const app_commands = [_]native_sdk.BridgeCommandPolicy{
     .{ .name = "app.workerInfo", .origins = &bridge_origins },
     .{ .name = "app.new", .origins = &dev_origins },
     .{ .name = "app.save", .origins = &dev_origins },
+    .{ .name = "app.import", .origins = &dev_origins },
+    .{ .name = "app.export", .origins = &dev_origins },
+    .{ .name = "app.settings", .origins = &dev_origins },
 };
 
 const builtin_commands = [_]native_sdk.BridgeCommandPolicy{
@@ -20,6 +23,8 @@ const builtin_commands = [_]native_sdk.BridgeCommandPolicy{
     .{ .name = "native-sdk.dialog.saveFile", .origins = &dev_origins },
     .{ .name = "native-sdk.dialog.showMessage", .origins = &dev_origins },
     .{ .name = "native-sdk.webview.toggleDevTools", .origins = &dev_origins },
+    .{ .name = "native-sdk.os.showNotification", .origins = &dev_origins },
+    .{ .name = "native-sdk.platform.supports", .origins = &dev_origins },
 };
 
 const App = struct {
@@ -51,6 +56,24 @@ const App = struct {
                     runtime.emitWindowEvent(1, "app.new", "{}") catch {};
                 } else if (std.mem.eql(u8, cmd.name, "app.save")) {
                     runtime.emitWindowEvent(1, "app.save", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.import")) {
+                    runtime.emitWindowEvent(1, "app.import", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.export")) {
+                    runtime.emitWindowEvent(1, "app.export", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.settings")) {
+                    runtime.emitWindowEvent(1, "app.settings", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.undo")) {
+                    runtime.emitWindowEvent(1, "app.undo", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.redo")) {
+                    runtime.emitWindowEvent(1, "app.redo", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.cut")) {
+                    runtime.emitWindowEvent(1, "app.cut", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.copy")) {
+                    runtime.emitWindowEvent(1, "app.copy", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.paste")) {
+                    runtime.emitWindowEvent(1, "app.paste", "{}") catch {};
+                } else if (std.mem.eql(u8, cmd.name, "app.selectAll")) {
+                    runtime.emitWindowEvent(1, "app.selectAll", "{}") catch {};
                 }
             },
             else => {},
@@ -96,18 +119,6 @@ const App = struct {
             .policy = .{ .enabled = true, .commands = &app_commands },
             .registry = .{ .handlers = &self.handlers },
         };
-    }
-
-    // The menus in app.zon trigger these commands. Forward to frontend.
-    fn forwardToFrontend(context: *anyopaque, invocation: native_sdk.bridge.Invocation, output: []u8) anyerror![]const u8 {
-        _ = context;
-        // We'd need access to the Runtime here to call frontend.dispatch, but
-        // context only holds App. Simplest: the bridge handler sets a flag in
-        // App state, and the event_fn (lifecycle) dispatches it. 
-        // Actually, Native SDK's `native.ping` example suggests dispatching 
-        // logic should be in the handler.
-        _ = invocation; _ = output;
-        return "{}";
     }
 
     fn start(context: *anyopaque, runtime: *native_sdk.Runtime) anyerror!void {

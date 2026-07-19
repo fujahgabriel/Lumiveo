@@ -40,7 +40,7 @@ describe("AppDatabase", () => {
       ...defaultSettings,
       analyticsEnabled: true,
       analyticsProvider: "posthog" as const,
-      ai: { provider: "eve" as const, model: "anthropic/claude-sonnet-5", endpoint: "http://127.0.0.1:2000", hasCredential: false },
+      ai: { provider: "openai" as const, model: "gpt-4o", endpoint: "", hasCredential: false },
     };
     database.setSettings(next);
     expect(database.getSettings()).toEqual(next);

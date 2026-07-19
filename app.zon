@@ -7,7 +7,7 @@
     .icons = .{ "assets/icon.png" },
     .platforms = .{ "macos" },
     .permissions = .{},
-    .capabilities = .{ "webview", "js_bridge", "dialogs", "devtools" },
+    .capabilities = .{ "webview", "js_bridge" },
     .bridge = .{
         .commands = .{
             .{ .name = "app.workerInfo", .origins = .{ "zero://app", "zero://inline", "http://127.0.0.1:5173", "http://127.0.0.1:4817", "http://localhost:4817" } },
@@ -15,6 +15,8 @@
             .{ .name = "app.save", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
             .{ .name = "native-sdk.dialog.openFile", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
             .{ .name = "native-sdk.webview.toggleDevTools", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+            .{ .name = "native-sdk.os.showNotification", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
+            .{ .name = "native-sdk.platform.supports", .origins = .{ "zero://app", "http://127.0.0.1:5173" } },
         },
     },
     .menus = .{
@@ -22,13 +24,25 @@
             .title = "File",
             .items = .{
                 .{ .label = "New Project", .command = "app.new", .key = "n", .modifiers = .{ "command" } },
+                .{ .label = "Import Media", .command = "app.import", .key = "i", .modifiers = .{ "command" } },
                 .{ .label = "Save", .command = "app.save", .key = "s", .modifiers = .{ "command" } },
+                .{ .separator = true },
+                .{ .label = "Export Video", .command = "app.export", .key = "e", .modifiers = .{ "command" } },
             },
         },
         .{
-            .title = "Developer",
+            .title = "Edit",
             .items = .{
-                .{ .label = "Toggle Developer Tools", .command = "native-sdk.webview.toggleDevTools", .key = "i", .modifiers = .{ "command", "option" } },
+                .{ .label = "Undo", .command = "app.undo", .key = "z", .modifiers = .{ "command" } },
+                .{ .label = "Redo", .command = "app.redo", .key = "z", .modifiers = .{ "command", "shift" } },
+                .{ .separator = true },
+                .{ .label = "Cut", .command = "app.cut", .key = "x", .modifiers = .{ "command" } },
+                .{ .label = "Copy", .command = "app.copy", .key = "c", .modifiers = .{ "command" } },
+                .{ .label = "Paste", .command = "app.paste", .key = "v", .modifiers = .{ "command" } },
+                .{ .separator = true },
+                .{ .label = "Select All", .command = "app.selectAll", .key = "a", .modifiers = .{ "command" } },
+                .{ .separator = true },
+                .{ .label = "Preferences…", .command = "app.settings", .key = ",", .modifiers = .{ "command" } },
             },
         },
     },

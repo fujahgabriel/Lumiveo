@@ -110,6 +110,28 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(project),
     }),
+  clearAllProjects: () =>
+    request<{ deleted: number }>("/v1/projects", { method: "DELETE" }),
+  exportProject: (projectId: string, targetPath: string) =>
+    request<{ path: string }>("/v1/projects/export", {
+      method: "POST",
+      body: JSON.stringify({ projectId, targetPath }),
+    }),
+  importProject: (sourcePath: string) =>
+    request<Project>("/v1/projects/import", {
+      method: "POST",
+      body: JSON.stringify({ sourcePath }),
+    }),
+  getProjectVersions: (projectId: string) =>
+    request<{ versions: Array<{ id: string; timestamp: string; size: number }> }>(`/v1/projects/${projectId}/versions`),
+  restoreProjectVersion: (projectId: string, versionId: string) =>
+    request<Project>(`/v1/projects/${projectId}/versions/${versionId}/restore`, { method: "POST" }),
+  testAiConnection: () =>
+    request<{ ok: boolean }>("/v1/settings/ai/test", { method: "POST" }),
+  testTtsConnection: () =>
+    request<{ ok: boolean }>("/v1/tts/test", { method: "POST" }),
+  getTtsVoices: () =>
+    request<{ voices: Array<{ id: string; name: string; category: string; previewUrl: string }> }>("/v1/tts/voices"),
   importFile: async (projectId: string, file: File) => {
     const response = await fetch(`${workerUrl}/v1/projects/${projectId}/assets`, {
       method: "POST",
@@ -124,6 +146,14 @@ export const api = {
     if (!response.ok) throw new Error("media_import_failed");
     return response.json() as Promise<{ project: Project }>;
   },
+  deleteProject: (projectId: string) =>
+    request<{ deleted: boolean }>(`/v1/projects/${projectId}`, { method: "DELETE" }),
+  renameProject: (projectId: string, title: string) =>
+    request<Project>(`/v1/projects/${projectId}`, { method: "PATCH", body: JSON.stringify({ title }) }),
+  deleteAsset: (projectId: string, assetId: string) =>
+    request<{ project: Project }>(`/v1/projects/${projectId}/assets/${assetId}`, {
+      method: "DELETE",
+    }),
   importPath: (projectId: string, path: string, mimeType: string) =>
     request<{ project: Project }>(`/v1/projects/${projectId}/assets/import-path`, {
       method: "POST",
@@ -131,12 +161,26 @@ export const api = {
     }),
   generate: (input: {
     projectId: string;
-    operation: "storyboard" | "translation";
+    operation: "storyboard" | "translation" | "scene";
     locale?: string;
   }) =>
     request<StoryboardProposal>("/v1/generations", {
       method: "POST",
       body: JSON.stringify({ ...input, regenerateSceneIds: [] }),
+    }),
+  regenerateScene: (input: {
+    projectId: string;
+    sceneId: string;
+    fields: Array<"caption" | "narration" | "name" | "layout">;
+  }) =>
+    request<{
+      caption?: string;
+      narration?: string;
+      name?: string;
+      layout?: string;
+    }>("/v1/generations/scene", {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
   applyProposal: (projectId: string, proposal: StoryboardProposal) =>
     request<Project>("/v1/generations/apply", {
@@ -148,9 +192,12 @@ export const api = {
     locale: string;
     preset: ExportPreset;
     format: ExportFormat;
+    scale?: number;
   }) => request<RenderJob>("/v1/renders", { method: "POST", body: JSON.stringify(input) }),
   render: (id: string) => request<RenderJob>(`/v1/renders/${id}`),
   cancelRender: (id: string) => request<RenderJob>(`/v1/renders/${id}`, { method: "DELETE" }),
+  getCacheSize: () =>
+    request<{ sizeString: string; bytes: number; dataDir: string; projectRoot: string; outputRoot: string }>("/v1/cache-size"),
   track: (name: string, properties?: Record<string, unknown>) =>
     request<void>("/v1/analytics/events", {
       method: "POST",
@@ -160,4 +207,12 @@ export const api = {
 
 export function assetUrl(projectId: string, assetId: string) {
   return `${workerUrl}/v1/projects/${projectId}/assets/${assetId}?token=${encodeURIComponent(workerToken)}`;
+}
+
+export async function sendNotification(title: string, body: string): Promise<void> {
+  try {
+    await window.zero?.invoke("native-sdk.os.showNotification", { title, body });
+  } catch {
+    // silently ignore if OS notifications are unavailable
+  }
 }

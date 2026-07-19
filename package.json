@@ -11,7 +11,6 @@
     "dev:native": "native dev . --yes",
     "dev:frontend": "npm --prefix frontend run dev -- --host 127.0.0.1",
     "dev:worker": "npm --prefix worker run dev",
-    "dev:agent": "eve dev --no-ui",
     "build": "npm run build:frontend && npm run build:worker && native build . --yes",
     "build:frontend": "npm --prefix frontend run build",
     "build:worker": "npm --prefix worker run build",
@@ -25,8 +24,7 @@
     "doctor": "native doctor --manifest app.zon --strict"
   },
   "dependencies": {
-    "ai": "^6.0.116",
-    "eve": "0.25.1"
+    "ai": "^6.0.116"
     ,"zod": "^4.3.6"
   },
   "devDependencies": {

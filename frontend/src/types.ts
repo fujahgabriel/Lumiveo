@@ -34,10 +34,25 @@ export interface Scene {
   assetId: string | null;
   durationInFrames: number;
   transition: "none" | "fade" | "slide" | "scale";
-  layout: "device" | "full" | "split";
+  layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
   background: string;
   accent: string;
   copy: Record<string, SceneCopy>;
+  showLogo?: boolean;
+  logoAssetId?: string | null;
+  logoWidth?: number;
+  logoHeight?: number;
+  logoRadius?: number;
+  textColor?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  fontStyle?: string;
+  mediaFit?: "cover" | "contain" | "fill" | "none";
+  mediaX?: number;
+  mediaY?: number;
+  devicePreset?: string;
+  voiceId?: string | null;
 }
 
 export interface Project {
@@ -69,10 +84,11 @@ export interface Project {
 export interface AppSettings {
   onboardingComplete: boolean;
   uiLocale: string;
+  notificationsEnabled: boolean;
   analyticsEnabled: boolean;
   analyticsProvider: "none" | "posthog" | "firebase";
   ai: {
-    provider: "local" | "eve" | "openai" | "anthropic" | "google" | "custom";
+    provider: "local" | "openai" | "anthropic" | "google" | "custom";
     model: string;
     endpoint: string;
     hasCredential: boolean;
@@ -81,6 +97,9 @@ export interface AppSettings {
     provider: "none" | "elevenlabs";
     voiceId: string;
     hasCredential: boolean;
+    speed?: number;
+    stability?: number;
+    similarityBoost?: number;
   };
 }
 
@@ -119,7 +138,7 @@ export interface StoryboardProposal {
     caption: string;
     narration: string;
     durationSeconds: number;
-    layout: "device" | "full" | "split";
+  layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
     transition: "none" | "fade" | "slide" | "scale";
   }>;
 }

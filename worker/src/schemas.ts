@@ -35,10 +35,25 @@ export const sceneSchema = z.object({
   assetId: z.string().uuid().nullable(),
   durationInFrames: z.number().int().min(15).max(18_000),
   transition: z.enum(["none", "fade", "slide", "scale"]).default("fade"),
-  layout: z.enum(["device", "full", "split"]).default("device"),
+  layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]).default("device"),
   background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   copy: localizedCopySchema,
+  showLogo: z.boolean().default(false),
+  logoAssetId: z.string().uuid().nullable().default(null),
+  logoWidth: z.number().int().min(20).max(1000).default(120),
+  logoHeight: z.number().int().min(20).max(1000).default(120),
+  logoRadius: z.number().int().min(0).max(500).default(20),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#f7f7f2"),
+  fontFamily: z.string().default("Inter"),
+  fontSize: z.number().int().min(12).max(120).default(40),
+  fontWeight: z.string().default("bold"),
+  fontStyle: z.string().default("normal"),
+  mediaFit: z.enum(["cover", "contain", "fill", "none"]).default("cover"),
+  mediaX: z.number().int().min(0).max(100).default(50),
+  mediaY: z.number().int().min(0).max(100).default(50),
+  devicePreset: z.string().default("iphone-6.7"),
+  voiceId: z.string().nullable().default(null),
 });
 
 export const generationRecordSchema = z.object({
@@ -72,11 +87,12 @@ export const projectSchema = z.object({
 export const appSettingsSchema = z.object({
   onboardingComplete: z.boolean().default(false),
   uiLocale: z.string().default("en"),
+  notificationsEnabled: z.boolean().default(true),
   analyticsEnabled: z.boolean().default(false),
   analyticsProvider: z.enum(["none", "posthog", "firebase"]).default("none"),
   ai: z
     .object({
-      provider: z.enum(["local", "eve", "openai", "anthropic", "google", "custom"]).default("local"),
+      provider: z.enum(["local", "openai", "anthropic", "google", "custom"]).default("local"),
       model: z.string().max(160).default(""),
       endpoint: z.string().url().or(z.literal("")).default(""),
       hasCredential: z.boolean().default(false),
@@ -87,6 +103,9 @@ export const appSettingsSchema = z.object({
       provider: z.enum(["none", "elevenlabs"]).default("none"),
       voiceId: z.string().max(160).default(""),
       hasCredential: z.boolean().default(false),
+      speed: z.number().min(0.5).max(2.0).default(1.0),
+      stability: z.number().min(0.0).max(1.0).default(0.75),
+      similarityBoost: z.number().min(0.0).max(1.0).default(0.75),
     })
     .prefault({}),
 });
@@ -96,13 +115,21 @@ export const renderRequestSchema = z.object({
   locale: z.string().min(2).max(35),
   preset: z.enum(["portrait", "landscape", "square"]),
   format: z.enum(["mp4", "gif", "png-sequence"]),
+  scale: z.number().min(0.1).max(10).default(1),
 });
 
 export const generationRequestSchema = z.object({
   projectId: z.string().uuid(),
-  operation: z.enum(["storyboard", "translation"]),
+  operation: z.enum(["storyboard", "translation", "scene"]),
   locale: z.string().min(2).max(35).optional(),
   regenerateSceneIds: z.array(z.string().uuid()).default([]),
+  fields: z.array(z.enum(["caption", "narration", "name", "layout"])).optional(),
+});
+
+export const sceneRegenerationSchema = z.object({
+  projectId: z.string().uuid(),
+  sceneId: z.string().uuid(),
+  fields: z.array(z.enum(["caption", "narration", "name", "layout"])),
 });
 
 export type Project = z.infer<typeof projectSchema>;

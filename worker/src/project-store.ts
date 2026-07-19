@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat, writeFile, unlink } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
@@ -25,7 +25,7 @@ export class ProjectStore {
 
   async create(title?: string) {
     const project = createProject(title);
-    const path = join(config.projectRoot, `${project.id}.appdemo`);
+    const path = join(config.projectRoot, `${project.id}.lumiveo`);
     await mkdir(join(path, "assets"), { recursive: true });
     await mkdir(join(path, "generated"), { recursive: true });
     await this.writeManifest(path, project);
@@ -108,6 +108,79 @@ export class ProjectStore {
     return this.requireRow(projectId).path;
   }
 
+  async rename(projectId: string, title: string) {
+    const project = await this.get(projectId);
+    if (!project) throw new Error("project_not_found");
+    const updated = await this.save({ ...project, title });
+    return updated;
+  }
+
+  async delete(projectId: string) {
+    const row = this.requireRow(projectId);
+    await rm(row.path, { recursive: true, force: true });
+    this.database.db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+    return { deleted: true };
+  }
+
+  async deleteAll() {
+    const rows = this.database.db
+      .prepare("SELECT id, path FROM projects")
+      .all() as unknown as ProjectRow[];
+    for (const row of rows) {
+      await rm(row.path, { recursive: true, force: true });
+    }
+    this.database.db.prepare("DELETE FROM projects").run();
+    return { deleted: rows.length };
+  }
+
+  async exportProject(projectId: string, targetDir: string) {
+    const row = this.requireRow(projectId);
+    await mkdir(targetDir, { recursive: true });
+    await copyFile(join(row.path, "project.json"), join(targetDir, "project.json"));
+    const assetsDir = join(row.path, "assets");
+    const assets = await readdir(assetsDir).catch(() => [] as string[]);
+    if (assets.length > 0) {
+      await mkdir(join(targetDir, "assets"), { recursive: true });
+      for (const file of assets) {
+        await copyFile(join(assetsDir, file), join(targetDir, "assets", file));
+      }
+    }
+    return { path: targetDir };
+  }
+
+  async importProject(sourceDir: string) {
+    const raw = await readFile(join(sourceDir, "project.json"), "utf8");
+    const project = projectSchema.parse(JSON.parse(raw));
+    const targetPath = join(config.projectRoot, `${project.id}.lumiveo`);
+    await mkdir(targetPath, { recursive: true });
+    await copyFile(join(sourceDir, "project.json"), join(targetPath, "project.json"));
+    const sourceAssets = join(sourceDir, "assets");
+    const files = await readdir(sourceAssets).catch(() => [] as string[]);
+    if (files.length > 0) {
+      await mkdir(join(targetPath, "assets"), { recursive: true });
+      for (const file of files) {
+        await copyFile(join(sourceAssets, file), join(targetPath, "assets", file));
+      }
+    }
+    this.upsertIndex(project, targetPath);
+    return project;
+  }
+
+  async removeAsset(projectId: string, assetId: string) {
+    const row = this.requireRow(projectId);
+    const project = await this.get(projectId);
+    if (!project) throw new Error("project_not_found");
+    const asset = project.assets.find((a) => a.id === assetId);
+    if (!asset) throw new Error("asset_not_found");
+    const filePath = join(row.path, "assets", asset.fileName);
+    await unlink(filePath).catch(() => {});
+    const updated = await this.save({
+      ...project,
+      assets: project.assets.filter((a) => a.id !== assetId),
+    });
+    return { project: updated };
+  }
+
   private async appendAsset(projectId: string, asset: Project["assets"][number]) {
     const project = await this.get(projectId);
     if (!project) throw new Error("project_not_found");
@@ -172,12 +245,62 @@ export class ProjectStore {
       );
   }
 
+  async listVersions(projectId: string) {
+    const row = this.requireRow(projectId);
+    const versionsDir = join(row.path, "versions");
+    const files = await readdir(versionsDir).catch(() => [] as string[]);
+    const list = [];
+    for (const file of files) {
+      if (!file.startsWith("project-") || !file.endsWith(".json")) continue;
+      const id = file.slice("project-".length, -".json".length);
+      const timestamp = new Date(Number(id)).toISOString();
+      const stats = await stat(join(versionsDir, file)).catch(() => null);
+      list.push({
+        id,
+        timestamp,
+        size: stats?.size ?? 0,
+      });
+    }
+    // Sort descending by timestamp (newest first)
+    return list.sort((a, b) => b.id.localeCompare(a.id));
+  }
+
+  async restoreVersion(projectId: string, versionId: string) {
+    const row = this.requireRow(projectId);
+    const source = join(row.path, "versions", `project-${versionId}.json`);
+    const target = join(row.path, "project.json");
+    await copyFile(source, target);
+    const restored = await this.get(projectId);
+    if (!restored) throw new Error("failed_to_load_restored_project");
+    return restored;
+  }
+
   private async writeManifest(path: string, project: Project) {
     const target = join(path, "project.json");
     const temporary = `${target}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(projectSchema.parse(project), null, 2)}\n`, {
+    const content = `${JSON.stringify(projectSchema.parse(project), null, 2)}\n`;
+    await writeFile(temporary, content, {
       mode: 0o600,
     });
     await rename(temporary, target);
+
+    // Save version history snapshot
+    const versionsDir = join(path, "versions");
+    await mkdir(versionsDir, { recursive: true }).catch(() => {});
+    const timestamp = Date.now();
+    const versionFile = join(versionsDir, `project-${timestamp}.json`);
+    await writeFile(versionFile, content, { mode: 0o600 }).catch(() => {});
+
+    // Prune to keep only the last 30 versions
+    const files = await readdir(versionsDir).catch(() => [] as string[]);
+    const projectVersions = files
+      .filter((file) => file.startsWith("project-") && file.endsWith(".json"))
+      .sort(); // ascending order of timestamps
+    if (projectVersions.length > 30) {
+      const toDelete = projectVersions.slice(0, projectVersions.length - 30);
+      for (const file of toDelete) {
+        await unlink(join(versionsDir, file)).catch(() => {});
+      }
+    }
   }
 }

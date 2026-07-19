@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { join } from "node:path";
 import { ZodError } from "zod";
 import { AiService, type StoryboardProposal } from "./ai.js";
 import { AnalyticsService } from "./analytics.js";
@@ -16,6 +17,7 @@ import {
   generationRequestSchema,
   projectSchema,
   renderRequestSchema,
+  sceneRegenerationSchema,
 } from "./schemas.js";
 import { MacKeychainSecretStore } from "./secrets.js";
 
@@ -50,6 +52,7 @@ const server = createServer(async (request, response) => {
   } catch (error) {
     analytics.captureException(error, `${request.method} ${url.pathname}`);
     if (error instanceof ZodError) {
+      console.error("[Zod Validation Error] Detailed validation issues:", JSON.stringify(error.issues, null, 2));
       json(response, 400, { error: "invalid_request", issues: error.issues });
       return;
     }
@@ -82,7 +85,7 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
   }
   if (request.method === "GET" && url.pathname === "/v1/providers/models") {
     const kind = (url.searchParams.get("provider") ?? "local") as ProviderKind;
-    if (!["local", "eve", "openai", "anthropic", "google", "custom"].includes(kind)) {
+    if (!["local", "openai", "anthropic", "google", "custom"].includes(kind)) {
       json(response, 400, { error: "unknown_provider" });
       return;
     }
@@ -98,6 +101,9 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
       provider: "none" | "elevenlabs";
       voiceId?: string;
       credential?: string;
+      speed?: number;
+      stability?: number;
+      similarityBoost?: number;
     };
     if (input.credential?.trim()) await secrets.set(`tts:${input.provider}`, input.credential.trim());
     const current = database.getSettings();
@@ -108,6 +114,9 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
         voiceId: input.voiceId?.trim() ?? "",
         hasCredential:
           input.provider === "none" || Boolean(await secrets.get(`tts:${input.provider}`)),
+        speed: input.speed ?? current.tts.speed ?? 1.0,
+        stability: input.stability ?? current.tts.stability ?? 0.75,
+        similarityBoost: input.similarityBoost ?? current.tts.similarityBoost ?? 0.75,
       },
     });
     database.setSettings(next);
@@ -128,6 +137,36 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 201, project);
     return;
   }
+  if (request.method === "PATCH" && url.pathname.startsWith("/v1/projects/")) {
+    const projectId = url.pathname.split("/")[3];
+    const input = (await readJson(request)) as { title: string };
+    json(response, 200, await projects.rename(projectId, input.title));
+    return;
+  }
+  if (request.method === "DELETE" && url.pathname.startsWith("/v1/projects/")) {
+    const projectId = url.pathname.split("/")[3];
+    json(response, 200, await projects.delete(projectId));
+    return;
+  }
+  if (request.method === "DELETE" && url.pathname === "/v1/projects") {
+    const result = await projects.deleteAll();
+    analytics.track("projects_cleared", { count: result.deleted });
+    json(response, 200, result);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/projects/export") {
+    const input = (await readJson(request)) as { projectId?: string; targetPath?: string };
+    if (!input.projectId || !input.targetPath) throw new Error("invalid_request");
+    json(response, 200, await projects.exportProject(input.projectId, input.targetPath));
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/projects/import") {
+    const input = (await readJson(request)) as { sourcePath?: string };
+    if (!input.sourcePath) throw new Error("invalid_request");
+    json(response, 200, await projects.importProject(input.sourcePath));
+    return;
+  }
 
   const projectMatch = url.pathname.match(/^\/v1\/projects\/([0-9a-f-]+)$/i);
   if (projectMatch && request.method === "GET") {
@@ -140,6 +179,18 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
   if (projectMatch && request.method === "PUT") {
     const project = await projects.save(projectSchema.parse(await readJson(request)));
     json(response, 200, project);
+    return;
+  }
+
+  const versionsMatch = url.pathname.match(/^\/v1\/projects\/([0-9a-f-]+)\/versions$/i);
+  if (versionsMatch && request.method === "GET") {
+    json(response, 200, { versions: await projects.listVersions(versionsMatch[1]) });
+    return;
+  }
+
+  const restoreMatch = url.pathname.match(/^\/v1\/projects\/([0-9a-f-]+)\/versions\/([0-9]+)\/restore$/i);
+  if (restoreMatch && request.method === "POST") {
+    json(response, 200, await projects.restoreVersion(restoreMatch[1], restoreMatch[2]));
     return;
   }
 
@@ -179,6 +230,12 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     await streamFile(request, response, info.path, info.asset.mimeType);
     return;
   }
+  if (assetMatch && request.method === "DELETE") {
+    const result = await projects.removeAsset(assetMatch[1], assetMatch[2]);
+    analytics.track("media_deleted");
+    json(response, 200, result);
+    return;
+  }
 
   if (request.method === "POST" && url.pathname === "/v1/generations") {
     const input = generationRequestSchema.parse(await readJson(request));
@@ -204,6 +261,14 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     }
     return;
   }
+  if (request.method === "POST" && url.pathname === "/v1/generations/scene") {
+    const input = sceneRegenerationSchema.parse(await readJson(request));
+    const result = await ai.regenerateScene(input.projectId, input.sceneId, input.fields);
+    analytics.track("scene_regenerated", { fields: input.fields.join(",") });
+    json(response, 200, result);
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/v1/generations/apply") {
     const input = (await readJson(request)) as {
       projectId: string;
@@ -250,6 +315,37 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 200, await licenses.status());
     return;
   }
+  if (request.method === "GET" && url.pathname === "/v1/cache-size") {
+    try {
+      const { readdir, stat } = await import("node:fs/promises");
+      let totalSize = 0;
+      const getDirSize = async (dir: string) => {
+        const entries = await readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const res = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await getDirSize(res);
+          } else if (entry.isFile()) {
+            const stats = await stat(res);
+            totalSize += stats.size;
+          }
+        }
+      };
+      await getDirSize(config.dataDir);
+      // Format as MB or KB
+      const mb = (totalSize / (1024 * 1024)).toFixed(2);
+      json(response, 200, {
+        sizeString: `${mb} MB`,
+        bytes: totalSize,
+        dataDir: config.dataDir,
+        projectRoot: config.projectRoot,
+        outputRoot: config.outputRoot,
+      });
+    } catch (e: any) {
+      json(response, 500, { error: e?.message || "failed_to_calculate_cache_size" });
+    }
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/v1/license/activate") {
     const input = (await readJson(request)) as { key?: string };
     json(response, 200, await licenses.activate(input.key ?? ""));
@@ -258,6 +354,20 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
   if (request.method === "POST" && url.pathname === "/v1/tts/generate") {
     const input = (await readJson(request)) as { projectId: string; sceneId: string; narration: string };
     json(response, 201, await tts.generate(input.projectId, input.sceneId, input.narration));
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/v1/tts/test") {
+    await tts.testConnection();
+    json(response, 200, { ok: true });
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/v1/tts/voices") {
+    try {
+      const voices = await tts.listVoices();
+      json(response, 200, { voices });
+    } catch (e: any) {
+      json(response, 500, { error: e?.message || "failed_to_list_voices" });
+    }
     return;
   }
 

@@ -23,18 +23,6 @@ export const providerMeta: Record<ProviderKind, ProviderMeta> = {
     needsKey: false,
     modelPlaceholder: "Deterministic offline drafts",
   },
-  eve: {
-    label: "Eve · AI Gateway",
-    tagline: "Vercel AI Gateway catalog",
-    keyUrl: "https://vercel.com/ai-gateway",
-    keyLabel: "Create an AI Gateway key",
-    needsKey: true,
-    keyOptional: true,
-    needsEndpoint: true,
-    endpointPlaceholder: "http://127.0.0.1:2000",
-    modelPlaceholder: "anthropic/claude-sonnet-5",
-    note: "Includes open-weight models: Kimi, DeepSeek, Qwen, GLM, MiniMax, Llama, gpt-oss.",
-  },
   openai: {
     label: "OpenAI",
     tagline: "Bring your own key",
@@ -75,7 +63,6 @@ export const ttsKeyUrl = "https://elevenlabs.io/app/settings/api-keys";
 
 export const providerOrder: ProviderKind[] = [
   "local",
-  "eve",
   "openai",
   "anthropic",
   "google",

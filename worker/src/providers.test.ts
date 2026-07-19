@@ -55,11 +55,10 @@ describe("model list parsers", () => {
 });
 
 describe("listModels fallback", () => {
-  it("curated gateway list includes open-weight Kimi models", async () => {
+  it("curated list includes claude models", async () => {
     // Unreachable endpoint forces the curated fallback deterministically.
-    const models = await listModels("eve", null, "http://127.0.0.1:9/unreachable");
-    expect(models.some((model) => model.id.startsWith("moonshotai/kimi"))).toBe(true);
-    expect(models.some((model) => model.openWeights)).toBe(true);
+    const models = await listModels("anthropic", null, "http://127.0.0.1:9/unreachable");
+    expect(models.some((model) => model.id.startsWith("claude"))).toBe(true);
   });
 
   it("falls back to curated lists for unreachable providers", async () => {

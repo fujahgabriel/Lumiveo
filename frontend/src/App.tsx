@@ -18,7 +18,6 @@ import {
   Trash2,
   Upload,
   Volume2,
-  WandSparkles,
   X,
 } from "lucide-react";
 import {
@@ -27,38 +26,151 @@ import {
   useEffect,
   useRef,
   useState,
+  useCallback,
 } from "react";
-import { api, assetUrl, resolveWorkerEndpoint, workerUrl, workerToken } from "./api";
+import { api, assetUrl, resolveWorkerEndpoint, workerUrl, workerToken, sendNotification } from "./api";
+import {
+  BrandHeader,
+  ExportModal,
+  LaunchScreen,
+  LocaleModal,
+  Onboarding,
+  ProjectHistoryModal,
+  ProposalModal,
+  SettingsPage,
+  TemplatePickerModal,
+} from "./components";
 import { t, uiDirection } from "./i18n";
-import { KeyLink, ModelPicker } from "./ModelPicker";
-import { providerMeta, providerOrder, ttsKeyUrl } from "./providers";
+import { defaultSettings } from "./lib/defaultSettings";
+import { addScene, mimeFromPath, normalizeDialogPaths, updateSceneCopy } from "./lib/projectHelpers";
+import { devicePresets } from "./video/AppDemoComposition";
+import { APP_NAME } from "./lib/constants";
+import { ProjectWizard } from "./ProjectWizard";
 import { StageView } from "./StageView";
 import type {
   AppSettings,
   ExportFormat,
   ExportPreset,
   Project,
+  ProjectListItem,
   RenderJob,
   Scene,
   StoryboardProposal,
 } from "./types";
 import { durationFor, presetDimensions } from "./video/config";
+import { type ProjectTemplate } from "./video/templates";
 
-type Modal = "onboarding" | "settings" | "export" | "locale" | "proposal" | null;
-
-const defaultSettings: AppSettings = {
-  onboardingComplete: false,
-  uiLocale: "en",
-  analyticsEnabled: false,
-  analyticsProvider: "none",
-  ai: { provider: "local", model: "", endpoint: "", hasCredential: true },
-  tts: { provider: "none", voiceId: "", hasCredential: false },
+const fontWeightsMap: Record<string, { value: string; label: string }[]> = {
+  "Inter": [
+    { value: "100", label: "Thin (100)" },
+    { value: "200", label: "Extra Light (200)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Roboto": [
+    { value: "100", label: "Thin (100)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Poppins": [
+    { value: "100", label: "Thin (100)" },
+    { value: "200", label: "Extra Light (200)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Montserrat": [
+    { value: "100", label: "Thin (100)" },
+    { value: "200", label: "Extra Light (200)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Playfair Display": [
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Lora": [
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+  ],
+  "Merriweather": [
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "900", label: "Black (900)" },
+  ],
+  "Syne": [
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+  ],
+  "Space Grotesque": [
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+  ],
+  "Bricolage Grotesque": [
+    { value: "200", label: "Extra Light (200)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+  ],
+  "JetBrains Mono": [
+    { value: "100", label: "Thin (100)" },
+    { value: "200", label: "Extra Light (200)" },
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+    { value: "800", label: "Extra Bold (800)" },
+  ],
+  "Fira Code": [
+    { value: "300", label: "Light (300)" },
+    { value: "400", label: "Regular (400)" },
+    { value: "500", label: "Medium (500)" },
+    { value: "600", label: "Semi Bold (600)" },
+    { value: "700", label: "Bold (700)" },
+  ],
 };
+
+type Modal = "onboarding" | "wizard" | "settings" | "export" | "locale" | "proposal" | null;
 
 export default function App() {
   const [status, setStatus] = useState<"booting" | "ready" | "offline">("booting");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [project, setProject] = useState<Project | null>(null);
+  const [projectsList, setProjectsList] = useState<ProjectListItem[]>([]);
   const [selectedSceneId, setSelectedSceneId] = useState("");
   const [preset, setPreset] = useState<ExportPreset>("portrait");
   const [modal, setModal] = useState<Modal>(null);
@@ -68,13 +180,180 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showNotice: typeof setNotice = (value) => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice(value);
+    if (value) noticeTimer.current = setTimeout(() => setNotice(null), 5_000);
+  };
   const [bootLogs, setBootLogs] = useState<string[]>([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showProjectHistoryModal, setShowProjectHistoryModal] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const deferredProject = useDeferredValue(project);
+  const [voices, setVoices] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingVoices, setLoadingVoices] = useState(false);
+  const [voicesError, setVoicesError] = useState<string | null>(null);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  const togglePlayAudio = (assetId: string) => {
+    if (playingAudioId === assetId) {
+      audioPlayerRef.current?.pause();
+      setPlayingAudioId(null);
+    } else {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      const url = assetUrl(project!.id, assetId);
+      audioPlayerRef.current = new Audio(url);
+      audioPlayerRef.current.onended = () => setPlayingAudioId(null);
+      void audioPlayerRef.current.play();
+      setPlayingAudioId(assetId);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      audioPlayerRef.current?.pause();
+    };
+  }, [project?.id]);
+
+  const refreshVoicesList = useCallback(async () => {
+    if (settings.tts.provider !== "elevenlabs") return;
+    setLoadingVoices(true);
+    setVoicesError(null);
+    try {
+      const res = await api.getTtsVoices();
+      setVoices(res.voices);
+    } catch (err: any) {
+      setVoicesError(err?.message || "failed_to_load_voices");
+      setVoices([]);
+    } finally {
+      setLoadingVoices(false);
+    }
+  }, [settings.tts.provider]);
+
+  useEffect(() => {
+    if (settings.tts.provider === "elevenlabs" && voices.length === 0 && !loadingVoices && !voicesError) {
+      void refreshVoicesList();
+    }
+  }, [settings.tts.provider, voices.length, loadingVoices, voicesError, refreshVoicesList]);
 
   const addLog = (msg: string) => {
     setBootLogs(current => [...current, `[${new Date().toLocaleTimeString()}] ${msg}`]);
   };
+
+  const refreshProjectsList = useCallback(async () => {
+    try {
+      const list = await api.projects();
+      setProjectsList(Array.isArray(list) ? list : []);
+    } catch {
+      /* keep existing list */
+    }
+  }, []);
+
+  const selectProject = async (id: string) => {
+    setBusy("load-project");
+    try {
+      const nextProject = await api.project(id);
+      setProject(nextProject);
+      if (nextProject.scenes && nextProject.scenes.length > 0) {
+        setSelectedSceneId(nextProject.scenes[0].id);
+      } else {
+        setSelectedSceneId("");
+      }
+      setShowProjectHistoryModal(false);
+      showNotice(`Loaded project: "${nextProject.title}"`);
+    } catch {
+      showNotice("Failed to load project details.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const applyTemplate = (template: ProjectTemplate) => {
+    console.log("[Templates] Attempting to apply template:", template);
+    try {
+      if (!project) {
+        showNotice("No active project to apply a template to.");
+        return;
+      }
+      updateProject((current) => {
+        const locale = current.activeLocale;
+        const scenes = template.scenes.map((sceneTpl, index) => {
+          const sid = crypto.randomUUID();
+          if (index === 0) {
+            setTimeout(() => setSelectedSceneId(sid), 10);
+          }
+          return {
+            id: sid,
+            name: sceneTpl.name,
+            assetId: null,
+            durationInFrames: sceneTpl.durationInFrames,
+            transition: sceneTpl.transition,
+            layout: sceneTpl.layout,
+            background: sceneTpl.background,
+            accent: sceneTpl.accent,
+            copy: {
+              [locale]: {
+                caption: sceneTpl.caption,
+                narration: sceneTpl.narration,
+                manuallyEdited: false,
+                stale: false,
+              },
+            },
+          };
+        });
+        return { ...current, title: template.name, scenes };
+      });
+      showNotice(`Successfully applied "${template.name}" template!`);
+      setShowTemplateModal(false);
+    } catch (e: any) {
+      console.error("[Templates Error] Failed to apply template:", e);
+      showNotice(`Failed to apply template: ${e?.message || String(e)}`);
+    }
+  };
+
+  async function createNewProject() {
+    setModal("wizard");
+  }
+
+  const handleWizardResult = async (title: string, scenes: Scene[], productName?: string, productDescription?: string) => {
+    try {
+      const next = await api.createProject(title);
+      const saved = await api.saveProject({
+        ...next,
+        scenes,
+        productName: productName || title,
+        productDescription: productDescription || "",
+      });
+      setProject(saved);
+      setSelectedSceneId(saved.scenes[0]?.id ?? "");
+      setDirty(false);
+      setModal(null);
+      await refreshProjectsList();
+      showNotice(`Project "${title}" created!`);
+    } catch {
+      showNotice("Failed to create project.");
+    }
+  };
+
+  const triggerSave = useCallback(async () => {
+    if (!project) return;
+    setSaving(true);
+    try {
+      const saved = await api.saveProject(project);
+      setProject(saved);
+      setDirty(false);
+      showNotice("Changes synced and saved to disk.");
+    } catch (err: any) {
+      console.error("[Manual Save Error]", err);
+      showNotice(`Could not save: ${err?.message || "Check settings or connection."}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [project]);
 
   const boot = async () => {
     setStatus("booting");
@@ -92,12 +371,23 @@ export default function App() {
       addLog("Loading user settings and projects list...");
       const [nextSettings, list] = await Promise.all([api.settings(), api.projects()]);
       addLog(`Loaded settings successfully. (Onboarding Completed: ${nextSettings.onboardingComplete})`);
+      if (nextSettings.tts.provider === "elevenlabs") {
+        addLog("Retrieving ElevenLabs voices from credential...");
+        try {
+          const res = await api.getTtsVoices();
+          setVoices(res.voices);
+          addLog(`Loaded ${res.voices.length} ElevenLabs voices!`);
+        } catch {
+          addLog("No voices loaded (TTS credential might be empty or invalid)");
+        }
+      }
       addLog(`Loaded projects successfully! Count: ${list.length}`);
+      setProjectsList(list);
       
       addLog("Retrieving default project details...");
       const nextProject = list[0]
         ? await api.project(list[0].id)
-        : await api.createProject("Untitled Lumiveo project");
+        : await api.createProject(`Untitled ${APP_NAME} project`);
       addLog(`Project loaded successfully! Title: "${nextProject.title}"`);
       
       setSettings(nextSettings);
@@ -107,7 +397,7 @@ export default function App() {
       } else {
         setSelectedSceneId("");
       }
-      setModal(nextSettings.onboardingComplete ? null : "onboarding");
+      setModal(nextSettings.onboardingComplete ? "wizard" : "onboarding");
       setStatus("ready");
       addLog("App is fully ready!");
     } catch (error: any) {
@@ -123,13 +413,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleNew = () => void createNewProject();
-    const handleSave = () => setDirty(true);
+    const handleNew = () => {
+      void createNewProject();
+    };
+    const handleSave = () => { void triggerSave(); };
+    const handleImport = () => void openNativeImport();
+    const handleExport = () => setModal("export");
+    const handleSettings = () => setModal("settings");
     
+    const execCmd = (cmd: string) => {
+      const el = document.activeElement as HTMLElement;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+        document.execCommand(cmd);
+      }
+    };
+    const handleUndo = () => execCmd("undo");
+    const handleRedo = () => execCmd("redo");
+    const handleCut = () => execCmd("cut");
+    const handleCopy = () => execCmd("copy");
+    const handlePaste = () => execCmd("paste");
+    const handleSelectAll = () => execCmd("selectAll");
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "s") {
         event.preventDefault();
-        handleSave();
+        void triggerSave();
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "n") {
         event.preventDefault();
@@ -140,11 +447,29 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("app.new", handleNew);
     window.addEventListener("app.save", handleSave);
+    window.addEventListener("app.import", handleImport);
+    window.addEventListener("app.export", handleExport);
+    window.addEventListener("app.settings", handleSettings);
+    window.addEventListener("app.undo", handleUndo);
+    window.addEventListener("app.redo", handleRedo);
+    window.addEventListener("app.cut", handleCut);
+    window.addEventListener("app.copy", handleCopy);
+    window.addEventListener("app.paste", handlePaste);
+    window.addEventListener("app.selectAll", handleSelectAll);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("app.new", handleNew);
       window.removeEventListener("app.save", handleSave);
+      window.removeEventListener("app.import", handleImport);
+      window.removeEventListener("app.export", handleExport);
+      window.removeEventListener("app.settings", handleSettings);
+      window.removeEventListener("app.undo", handleUndo);
+      window.removeEventListener("app.redo", handleRedo);
+      window.removeEventListener("app.cut", handleCut);
+      window.removeEventListener("app.copy", handleCopy);
+      window.removeEventListener("app.paste", handlePaste);
+      window.removeEventListener("app.selectAll", handleSelectAll);
     };
   }, []);
 
@@ -160,7 +485,7 @@ export default function App() {
           setDirty(false);
         }
       } catch {
-        setNotice("Could not save. Your edits remain in this window.");
+        showNotice("Could not save. Your edits remain in this window.");
       } finally {
         setSaving(false);
       }
@@ -172,10 +497,16 @@ export default function App() {
     if (!renderJob || !["queued", "running"].includes(renderJob.status)) return;
     const timer = window.setInterval(async () => {
       const next = await api.render(renderJob.id).catch(() => null);
-      if (next) setRenderJob(next);
+      if (!next) return;
+      if (next.status === "completed" && renderJob.status !== "completed") {
+        notifyOS("Export Complete", `Your demo video is ready.`);
+      } else if (next.status === "failed" && renderJob.status !== "failed") {
+        notifyOS("Export Failed", next.error_code ?? "An error occurred during rendering.");
+      }
+      setRenderJob(next);
     }, 800);
     return () => window.clearInterval(timer);
-  }, [renderJob]);
+  }, [renderJob, settings.notificationsEnabled]);
 
   const updateProject = (updater: (current: Project) => Project) => {
     setProject((current) => (current ? updater(current) : current));
@@ -215,7 +546,7 @@ export default function App() {
         }
       }
     } catch {
-      setNotice("One or more media files could not be imported.");
+      showNotice("One or more media files could not be imported.");
     } finally {
       setBusy(null);
     }
@@ -255,8 +586,9 @@ export default function App() {
       const next = await api.generate({ projectId: project.id, operation, locale });
       setProposal(next);
       setModal("proposal");
+      notifyOS("Storyboard Ready", operation === "translation" ? `${locale} translation is ready for review.` : "Your storyboard has been generated.");
     } catch {
-      setNotice("Generation failed. Check your AI provider in Settings and try again.");
+      showNotice("Generation failed. Check your AI provider in Settings and try again.");
     } finally {
       setBusy(null);
     }
@@ -271,6 +603,8 @@ export default function App() {
       setSelectedSceneId(next.scenes[0]?.id ?? "");
       setProposal(null);
       setModal(null);
+    } catch {
+      showNotice("Failed to apply storyboard.");
     } finally {
       setBusy(null);
     }
@@ -278,8 +612,12 @@ export default function App() {
 
   const startRender = async (input: { preset: ExportPreset; format: ExportFormat; locale: string }) => {
     if (!project) return;
-    const job = await api.startRender({ projectId: project.id, ...input });
-    setRenderJob(job);
+    try {
+      const job = await api.startRender({ projectId: project.id, ...input });
+      setRenderJob(job);
+    } catch {
+      showNotice("Failed to start export. Check your render config.");
+    }
   };
 
   const generateVoiceover = async (sceneId: string, narration: string) => {
@@ -291,9 +629,56 @@ export default function App() {
         ...current,
         assets: [...current.assets, result.asset],
       }));
-      setNotice("Voiceover generated.");
+      showNotice("Voiceover generated.");
+      notifyOS("Voiceover Ready", "Narration has been generated for this scene.");
     } catch {
-      setNotice("Voiceover failed. Check ElevenLabs config.");
+      showNotice("Voiceover failed. Check ElevenLabs config.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteProjectAsset = async (assetId: string, name: string) => {
+    if (!project) return;
+    if (!confirm(`Are you sure you want to permanently delete "${name}"? This will delete the file from your disk and cannot be undone.`)) return;
+    try {
+      const result = await api.deleteAsset(project.id, assetId);
+      updateProject(() => result.project);
+      showNotice(`Permanently deleted "${name}"`);
+    } catch {
+      showNotice("Failed to delete asset.");
+    }
+  };
+
+  const regenerateSceneField = async (sceneId: string, fields: Array<"caption" | "narration" | "name" | "layout">) => {
+    if (!project) return;
+    setBusy("scene-regen");
+    try {
+      const result = await api.regenerateScene({ projectId: project.id, sceneId, fields });
+      updateProject((current) => {
+        const scenes = current.scenes.map((scene) => {
+          if (scene.id !== sceneId) return scene;
+          const copy = { ...scene.copy };
+          const locale = current.activeLocale;
+          const currentCopy = copy[locale] ?? copy[current.sourceLocale] ?? { caption: "", narration: "", manuallyEdited: false, stale: false };
+          copy[locale] = {
+            ...currentCopy,
+            caption: result.caption ?? currentCopy.caption,
+            narration: result.narration ?? currentCopy.narration,
+            stale: false,
+          };
+          return {
+            ...scene,
+            name: result.name ?? scene.name,
+            layout: (result.layout as Scene["layout"]) ?? scene.layout,
+            copy,
+          };
+        });
+        return { ...current, scenes };
+      });
+      showNotice(`Regenerated ${fields.join(" & ")}.`);
+    } catch {
+      showNotice("Regeneration failed. Check your AI provider.");
     } finally {
       setBusy(null);
     }
@@ -313,12 +698,8 @@ export default function App() {
   return (
     <div className="app-shell" dir={uiDirection(settings.uiLocale)}>
       <header className="titlebar drag-region">
-        <div className="brand no-drag">
-          <span className="brand-mark"><Clapperboard size={17} /></span>
-          <strong>App Demo Studio</strong>
-          <span className="beta-pill">PREVIEW</span>
-        </div>
-        <div className="project-title no-drag">
+        <BrandHeader />
+        <div className="project-title no-drag" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <input
             value={project.title}
             aria-label="Project title"
@@ -326,9 +707,45 @@ export default function App() {
               updateProject((current) => ({ ...current, title: event.target.value }))
             }
           />
-          <span className="save-state">{saving ? "Saving…" : translate("saveState")}</span>
+          <span className="save-state" style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text-3)" }}>
+            {saving ? (
+              <>
+                <LoaderCircle className="spin" size={12} />
+                <span>Saving…</span>
+              </>
+            ) : (
+              <>
+                <Check size={12} style={{ color: "var(--accent)" }} />
+                <span>Saved</span>
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={() => void triggerSave()}
+                  style={{
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "var(--bg-3)",
+                    border: "1px solid var(--line)",
+                    borderRadius: "4px",
+                    color: "var(--text-2)",
+                    marginLeft: "4px",
+                    cursor: "pointer",
+                  }}
+                  title="Sync and Save Now"
+                >
+                  Sync
+                </button>
+              </>
+            )}
+          </span>
         </div>
         <div className="title-actions no-drag">
+          <button className="quiet-button" title="Project History" onClick={() => setShowProjectHistoryModal(true)}>
+            <FolderOpen size={15} /> Projects
+          </button>
+          <button className="quiet-button" style={{ color: "var(--accent)" }} onClick={() => setShowTemplateModal(true)}>
+            <Sparkles size={15} /> Use Template
+          </button>
           <button className="quiet-button" onClick={() => void createNewProject()}>
             <Plus size={15} /> {translate("newProject")}
           </button>
@@ -361,27 +778,129 @@ export default function App() {
             accept="image/*,video/*,audio/*,.gif"
             onChange={(event) => void importFiles(Array.from(event.target.files ?? []))}
           />
-          <div className="asset-grid">
-            {project.assets.map((asset) => (
-              <button
-                key={asset.id}
-                className={`asset-card ${selectedScene.assetId === asset.id ? "selected" : ""}`}
-                onClick={() => updateScene((scene) => ({ ...scene, assetId: asset.id }))}
-                title={`Use ${asset.name} in selected scene`}
-              >
-                <div className="asset-thumb">
-                  {asset.mediaType === "image" || asset.mediaType === "gif" ? (
-                    <img src={assetUrl(project.id, asset.id)} alt="" />
-                  ) : asset.mediaType === "video" ? (
-                    <Film size={23} />
-                  ) : (
-                    <Volume2 size={23} />
-                  )}
-                  <span>{asset.mediaType}</span>
+          <div className="asset-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "12px" }}>
+            {project.assets.map((asset) => {
+              const isAudio = asset.mediaType === "audio";
+              const isSelected = isAudio 
+                ? (asset.name === `voiceover-${selectedScene.id}.mp3` || asset.name.includes(selectedScene.id))
+                : selectedScene.assetId === asset.id;
+              
+              return (
+                <div
+                  key={asset.id}
+                  className={`asset-card ${isSelected ? "selected" : ""}`}
+                  style={{
+                    position: "relative",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    background: "var(--bg-2)",
+                    border: isSelected ? "1.5px solid var(--accent)" : "1px solid var(--line)",
+                    borderRadius: "var(--radius-m)",
+                    padding: "10px",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <div className="asset-thumb" style={{ position: "relative", width: "100%", height: "80px", borderRadius: "var(--radius-s)", overflow: "hidden", display: "grid", placeItems: "center", background: "var(--bg-3)", userSelect: "none" }}>
+                    {asset.mediaType === "image" || asset.mediaType === "gif" ? (
+                      <img src={assetUrl(project.id, asset.id)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : asset.mediaType === "video" ? (
+                      <Film size={23} style={{ color: "var(--text-2)" }} />
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                        <Volume2 size={20} style={{ color: "var(--text-2)" }} />
+                        <button
+                          type="button"
+                          className="quiet-button"
+                          onClick={() => togglePlayAudio(asset.id)}
+                          style={{
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: playingAudioId === asset.id ? "var(--accent)" : "var(--bg-hover)",
+                            color: playingAudioId === asset.id ? "#000" : "var(--text-1)",
+                            borderRadius: "12px",
+                            fontWeight: "bold",
+                            border: "none",
+                            cursor: "pointer",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                          }}
+                        >
+                          {playingAudioId === asset.id ? "Pause" : "Listen"}
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Floating Trash/Delete Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteProjectAsset(asset.id, asset.name);
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: "6px",
+                        left: "6px",
+                        width: "24px",
+                        height: "24px",
+                        borderRadius: "50%",
+                        background: "rgba(20,20,18,0.85)",
+                        color: "#ff6b6b",
+                        border: "1px solid var(--line-strong)",
+                        display: "grid",
+                        placeItems: "center",
+                        cursor: "pointer",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
+                        zIndex: 2,
+                      }}
+                      title="Delete asset permanently"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+
+                    {/* Floating Select Plus/Check Toggle */}
+                    {(!isAudio || isSelected) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isAudio) {
+                            showNotice("Audio tracks are automatically assigned to scenes. To remove, use the red Trash button on the left.");
+                          } else {
+                            if (selectedScene.assetId === asset.id) {
+                              updateScene((scene) => ({ ...scene, assetId: null }));
+                              showNotice("Cleared scene background asset.");
+                            } else {
+                              updateScene((scene) => ({ ...scene, assetId: asset.id }));
+                            }
+                          }
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: "6px",
+                          right: "6px",
+                          width: "24px",
+                          height: "24px",
+                          borderRadius: "50%",
+                          background: isSelected ? "var(--accent)" : "rgba(20,20,18,0.85)",
+                          color: isSelected ? "#000" : "var(--text-1)",
+                          border: "1px solid var(--line-strong)",
+                          display: "grid",
+                          placeItems: "center",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.45)",
+                          zIndex: 2,
+                        }}
+                        title={isSelected ? "Remove from scene" : "Apply to scene"}
+                      >
+                        {isSelected ? <Check size={12} strokeWidth={3} /> : <Plus size={12} />}
+                      </button>
+                    )}
+                  </div>
+                  <small style={{ fontSize: "11px", color: "var(--text-2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", display: "block", textAlign: "center" }}>{asset.name}</small>
                 </div>
-                <small>{asset.name}</small>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </aside>
 
@@ -413,7 +932,7 @@ export default function App() {
           </div>
           <StageView project={deferredProject} locale={locale} preset={preset} />
           <div className="ai-bar">
-            <div className="ai-orb"><WandSparkles size={18} /></div>
+            <div className="ai-orb"><Sparkles size={18} /></div>
             <div><strong>Creative agent</strong><span>{settings.ai.provider} · {settings.ai.model || "local draft"}</span></div>
             <button onClick={() => void generate("storyboard")} disabled={busy !== null}>
               {busy === "storyboard" ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
@@ -430,30 +949,76 @@ export default function App() {
             <div><span className="kicker">03</span><h2>Inspector</h2></div>
             <span className="scene-badge">{project.scenes.indexOf(selectedScene) + 1}/{project.scenes.length}</span>
           </div>
-          <label className="field">
-            <span>Scene name</span>
+          <div className="field">
+            <div className="field-label-row">
+              <span>Scene name</span>
+              <button className="field-regen" disabled={busy !== null} onClick={() => void regenerateSceneField(selectedScene.id, ["name"])}>
+                <RotateCcw size={11} />
+              </button>
+            </div>
             <input value={selectedScene.name} onChange={(event) => updateScene((scene) => ({ ...scene, name: event.target.value }))} />
-          </label>
-          <label className="field">
-            <span>{translate("caption")}</span>
+          </div>
+          <div className="field">
+            <div className="field-label-row">
+              <span>{translate("caption")}</span>
+              <button className="field-regen" disabled={busy !== null} onClick={() => void regenerateSceneField(selectedScene.id, ["caption"])}>
+                <RotateCcw size={11} />
+              </button>
+            </div>
             <textarea
               rows={4}
               value={copy?.caption ?? ""}
               onChange={(event) => updateSceneCopy(updateScene, selectedScene, locale, "caption", event.target.value)}
             />
             <small>{copy?.caption.length ?? 0}/500</small>
-          </label>
-          <label className="field">
-            <span>{translate("narration")}</span>
+          </div>
+          <div className="field">
+            <div className="field-label-row">
+              <span>{translate("narration")}</span>
+              <button className="field-regen" disabled={busy !== null} onClick={() => void regenerateSceneField(selectedScene.id, ["narration"])}>
+                <RotateCcw size={11} />
+              </button>
+            </div>
             <textarea
               rows={5}
               value={copy?.narration ?? ""}
               onChange={(event) => updateSceneCopy(updateScene, selectedScene, locale, "narration", event.target.value)}
             />
+            {settings.tts.provider === "elevenlabs" && (
+              <label className="field" style={{ marginTop: "8px", marginBottom: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Scene Voice Override</span>
+                  {loadingVoices && <LoaderCircle className="spin" size={11} />}
+                </div>
+                <select
+                  value={selectedScene.voiceId ?? ""}
+                  onChange={(event) => updateScene((scene) => ({ ...scene, voiceId: event.target.value || null }))}
+                  disabled={loadingVoices}
+                >
+                  {loadingVoices ? (
+                    <option value="">Loading voices...</option>
+                  ) : (
+                    <>
+                      <option value="">-- Use Default Voice --</option>
+                      {voices.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                      {voicesError && <option disabled>Error loading voices: {voicesError}</option>}
+                      {voices.length === 0 && !voicesError && <option disabled>No voices found (check key)</option>}
+                    </>
+                  )}
+                </select>
+              </label>
+            )}
             <button className="quiet-button" disabled={busy === "tts" || !settings.tts.hasCredential} onClick={() => void generateVoiceover(selectedScene.id, copy?.narration ?? "")}>
               {busy === "tts" ? <LoaderCircle className="spin" size={12}/> : <Volume2 size={12}/>} Generate voiceover
             </button>
-          </label>
+            <p style={{ margin: "6px 0 0", fontSize: "10px", color: "var(--text-3)", lineHeight: "1.4" }}>
+              <strong>Tip:</strong> Use punctuation like <code>...</code>, <code>,</code>, <code>—</code>, or insert <code>&lt;break time="1s" /&gt;</code> to create natural pauses in ElevenLabs.
+            </p>
+          </div>
           <div className="field-grid">
             <label className="field">
               <span>{translate("duration")}</span>
@@ -472,15 +1037,35 @@ export default function App() {
                 <span>sec</span>
               </div>
             </label>
-            <label className="field">
-              <span>{translate("layout")}</span>
+            <div className="field">
+              <div className="field-label-row">
+                <span>{translate("layout")}</span>
+                <button className="field-regen" disabled={busy !== null} onClick={() => void regenerateSceneField(selectedScene.id, ["layout"])}>
+                  <RotateCcw size={11} />
+                </button>
+              </div>
               <select value={selectedScene.layout} onChange={(event) => updateScene((scene) => ({ ...scene, layout: event.target.value as Scene["layout"] }))}>
                 <option value="device">Device</option>
                 <option value="full">Full frame</option>
                 <option value="split">Split</option>
+                <option value="minimal">Minimal (No Shadow)</option>
+                <option value="gradient">Gradient Glow</option>
+                <option value="highlight">Accent Highlight</option>
+              </select>
+            </div>
+          </div>
+
+          {selectedScene.layout !== "full" && (
+            <label className="field" style={{ marginTop: "4px", marginBottom: "8px" }}>
+              <span>Device Frame Preset</span>
+              <select value={selectedScene.devicePreset ?? "iphone-6.7"} onChange={(event) => updateScene((scene) => ({ ...scene, devicePreset: event.target.value }))}>
+                {Object.entries(devicePresets).map(([key, val]) => (
+                  <option key={key} value={key}>{val.label}</option>
+                ))}
               </select>
             </label>
-          </div>
+          )}
+
           <label className="field">
             <span>{translate("transition")}</span>
             <div className="transition-grid">
@@ -492,6 +1077,139 @@ export default function App() {
           <div className="field-grid colors">
             <label className="field"><span>Background</span><input type="color" value={selectedScene.background} onChange={(event) => updateScene((scene) => ({ ...scene, background: event.target.value }))} /></label>
             <label className="field"><span>Accent</span><input type="color" value={selectedScene.accent} onChange={(event) => updateScene((scene) => ({ ...scene, accent: event.target.value }))} /></label>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <h4 style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-3)" }}>Typography</h4>
+            
+            <div className="field-grid">
+              <label className="field">
+                <span>Font Family</span>
+                <select value={selectedScene.fontFamily ?? "Inter"} onChange={(event) => updateScene((scene) => ({ ...scene, fontFamily: event.target.value }))}>
+                  <option value="Inter">Inter</option>
+                  <option value="Roboto">Roboto</option>
+                  <option value="Playfair Display">Playfair Display</option>
+                  <option value="Merriweather">Merriweather</option>
+                  <option value="JetBrains Mono">JetBrains Mono</option>
+                  <option value="Fira Code">Fira Code</option>
+                  <option value="Montserrat">Montserrat</option>
+                  <option value="Poppins">Poppins</option>
+                  <option value="Lora">Lora</option>
+                  <option value="Syne">Syne</option>
+                  <option value="Space Grotesque">Space Grotesque</option>
+                  <option value="Bricolage Grotesque">Bricolage Grotesque</option>
+                </select>
+              </label>
+              
+              <label className="field">
+                <span>Text Color</span>
+                <input type="color" value={selectedScene.textColor ?? "#f7f7f2"} onChange={(event) => updateScene((scene) => ({ ...scene, textColor: event.target.value }))} />
+              </label>
+            </div>
+
+            <div className="field-grid">
+              <label className="field">
+                <span>Font Size (px)</span>
+                <input type="number" min={12} max={120} value={selectedScene.fontSize ?? 40} onChange={(event) => updateScene((scene) => ({ ...scene, fontSize: Number(event.target.value) }))} />
+              </label>
+
+              <label className="field">
+                <span>Font Weight</span>
+                <select value={selectedScene.fontWeight ?? "bold"} onChange={(event) => updateScene((scene) => ({ ...scene, fontWeight: event.target.value }))}>
+                  {(fontWeightsMap[selectedScene.fontFamily ?? "Inter"] ?? fontWeightsMap["Inter"]).map((w) => (
+                    <option key={w.value} value={w.value}>{w.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="field-grid">
+              <div className="field">
+                <span>Italic</span>
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={() => updateScene((scene) => ({ ...scene, fontStyle: scene.fontStyle === "italic" ? "normal" : "italic" }))}
+                  style={{
+                    width: "100%",
+                    fontStyle: "italic",
+                    border: selectedScene.fontStyle === "italic" ? "1.5px solid var(--accent)" : "1px solid var(--line)",
+                    background: selectedScene.fontStyle === "italic" ? "var(--bg-3)" : "transparent",
+                    height: "36px",
+                  }}
+                >
+                  Italic (I)
+                </button>
+              </div>
+              <div className="field" style={{ visibility: "hidden" }} />
+            </div>
+          </div>
+
+          <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <h4 style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-3)" }}>Media Placement</h4>
+            
+            <div className="field-grid">
+              <label className="field">
+                <span>Fitting</span>
+                <select value={selectedScene.mediaFit ?? "cover"} onChange={(event) => updateScene((scene) => ({ ...scene, mediaFit: event.target.value as any }))}>
+                  <option value="cover">Cover (Fill)</option>
+                  <option value="contain">Contain (Fit)</option>
+                  <option value="fill">Stretch (Fill raw)</option>
+                  <option value="none">Original size</option>
+                </select>
+              </label>
+              <div className="field" style={{ visibility: "hidden" }} />
+            </div>
+
+            <div className="field-grid">
+              <label className="field">
+                <span>Align Horizontal (X: {selectedScene.mediaX ?? 50}%)</span>
+                <input type="range" min={0} max={100} value={selectedScene.mediaX ?? 50} onChange={(event) => updateScene((scene) => ({ ...scene, mediaX: Number(event.target.value) }))} />
+              </label>
+
+              <label className="field">
+                <span>Align Vertical (Y: {selectedScene.mediaY ?? 50}%)</span>
+                <input type="range" min={0} max={100} value={selectedScene.mediaY ?? 50} onChange={(event) => updateScene((scene) => ({ ...scene, mediaY: Number(event.target.value) }))} />
+              </label>
+            </div>
+          </div>
+          
+          <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none" }}>
+              <input type="checkbox" checked={selectedScene.showLogo ?? false} onChange={(event) => updateScene((scene) => ({ ...scene, showLogo: event.target.checked }))} />
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <strong style={{ fontSize: "12px", color: "var(--text-1)" }}>Show Brand Logo</strong>
+                <span style={{ fontSize: "10px", color: "var(--text-3)" }}>Add custom branding to this scene</span>
+              </div>
+            </label>
+
+            {(selectedScene.showLogo ?? false) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <label className="field">
+                  <span>Logo Asset</span>
+                  <select value={selectedScene.logoAssetId ?? ""} onChange={(event) => updateScene((scene) => ({ ...scene, logoAssetId: event.target.value || null }))}>
+                    <option value="">-- No Logo selected --</option>
+                    {project.assets.filter(a => a.mediaType === "image" || a.mediaType === "gif").map((asset) => (
+                      <option key={asset.id} value={asset.id}>{asset.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="field-grid">
+                  <label className="field">
+                    <span>Width (px)</span>
+                    <input type="number" min={20} max={1000} value={selectedScene.logoWidth ?? 120} onChange={(event) => updateScene((scene) => ({ ...scene, logoWidth: Number(event.target.value) }))} />
+                  </label>
+                  <label className="field">
+                    <span>Height (px)</span>
+                    <input type="number" min={20} max={1000} value={selectedScene.logoHeight ?? 120} onChange={(event) => updateScene((scene) => ({ ...scene, logoHeight: Number(event.target.value) }))} />
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Border Radius (px)</span>
+                  <input type="number" min={0} max={500} value={selectedScene.logoRadius ?? 20} onChange={(event) => updateScene((scene) => ({ ...scene, logoRadius: Number(event.target.value) }))} />
+                </label>
+              </div>
+            )}
           </div>
         </aside>
       </div>
@@ -529,22 +1247,69 @@ export default function App() {
         </div>
       </section>
 
-      {notice ? <div className="toast"><CircleAlert size={17} /><span>{notice}</span><button onClick={() => setNotice(null)}><X size={15} /></button></div> : null}
+      {notice ? <div className="toast"><CircleAlert size={17} /><span>{notice}</span><button onClick={() => showNotice(null)}><X size={15} /></button></div> : null}
+
+      {showProjectHistoryModal ? (
+        <ProjectHistoryModal
+          projects={projectsList}
+          activeProjectId={project?.id}
+          onClose={() => setShowProjectHistoryModal(false)}
+          onRefresh={refreshProjectsList}
+          onSelect={(id) => void selectProject(id)}
+          onDelete={async (id) => {
+            await api.deleteProject(id);
+            if (project?.id === id) {
+              const remaining = projectsList.filter((p) => p.id !== id);
+              if (remaining[0]) await selectProject(remaining[0].id);
+              else {
+                setProject(null);
+                setSelectedSceneId("");
+              }
+            }
+            await refreshProjectsList();
+          }}
+          onRename={async (id, title) => {
+            await api.renameProject(id, title);
+            if (project?.id === id) setProject({ ...project, title });
+            await refreshProjectsList();
+          }}
+          onRestore={async (id, versionId) => {
+            try {
+              const restored = await api.restoreProjectVersion(id, versionId);
+              if (project?.id === id) {
+                setProject(restored);
+                if (restored.scenes && restored.scenes.length > 0) {
+                  setSelectedSceneId(restored.scenes[0].id);
+                }
+              }
+              setShowProjectHistoryModal(false);
+              showNotice("Project restored to selected revision successfully.");
+            } catch {
+              showNotice("Failed to restore selected revision.");
+            }
+          }}
+          onCreateNew={() => {
+            setShowProjectHistoryModal(false);
+            setModal("wizard");
+          }}
+        />
+      ) : null}
+
+      {showTemplateModal ? (
+        <TemplatePickerModal
+          onClose={() => setShowTemplateModal(false)}
+          onSelect={(template) => applyTemplate(template)}
+        />
+      ) : null}
 
       {modal === "onboarding" ? <Onboarding settings={settings} onComplete={completeOnboarding} /> : null}
-      {modal === "settings" ? <SettingsModal settings={settings} onClose={() => setModal(null)} onSave={saveSettings} /> : null}
+      {modal === "wizard" ? <ProjectWizard onCreateProject={handleWizardResult} onClose={() => setModal(null)} /> : null}
+      {modal === "settings" ? <SettingsPage settings={settings} voices={voices} project={project} onBack={() => setModal(null)} onSave={saveSettings} onClear={async () => { setModal(null); setProject(null); setSelectedSceneId(""); await refreshProjectsList(); }} /> : null}
       {modal === "locale" ? <LocaleModal project={project} busy={busy === "translation"} onClose={() => setModal(null)} onGenerate={(code) => void generate("translation", code)} /> : null}
       {modal === "proposal" && proposal ? <ProposalModal proposal={proposal} busy={busy === "apply"} onClose={() => { setProposal(null); setModal(null); }} onApply={() => void applyProposal()} /> : null}
       {modal === "export" ? <ExportModal project={project} job={renderJob} onClose={() => { setModal(null); setRenderJob(null); }} onStart={startRender} onCancel={() => renderJob && void api.cancelRender(renderJob.id).then(setRenderJob)} /> : null}
     </div>
   );
-
-  async function createNewProject() {
-    const next = await api.createProject("Untitled Lumiveo project");
-    setProject(next);
-    setSelectedSceneId(next.scenes[0].id);
-    setDirty(false);
-  }
 
   function moveScene(direction: -1 | 1) {
     const active = project;
@@ -574,11 +1339,13 @@ export default function App() {
     endpoint: string;
     credential: string;
     analyticsEnabled: boolean;
+    notificationsEnabled: boolean;
   }) {
     const configured = await api.configureAi(next);
     const completed = await api.saveSettings({
       ...configured,
       onboardingComplete: true,
+      notificationsEnabled: next.notificationsEnabled,
       analyticsEnabled: next.analyticsEnabled,
       analyticsProvider: next.analyticsEnabled ? "posthog" : "none",
     });
@@ -587,223 +1354,23 @@ export default function App() {
     void api.track("onboarding_completed", { provider: next.provider });
   }
 
-  async function saveSettings(next: AppSettings & { credential?: string; ttsCredential?: string }) {
-    const configured = await api.configureAi({ ...next.ai, credential: next.credential });
-    const withTts = await api.configureTts({ ...next.tts, credential: next.ttsCredential });
-    const saved = await api.saveSettings({ ...next, ai: configured.ai, tts: withTts.tts });
+  function notifyOS(title: string, body: string) {
+    if (!settings.notificationsEnabled) return;
+    void sendNotification(title, body);
+  }
+
+  async function saveSettings(draftSettings: AppSettings & { credential?: string; ttsCredential?: string }) {
+    const configured = await api.configureAi({ ...draftSettings.ai, credential: draftSettings.credential });
+    const withTts = await api.configureTts({ ...draftSettings.tts, credential: draftSettings.ttsCredential });
+    const saved = await api.saveSettings({ ...draftSettings, ai: configured.ai, tts: withTts.tts });
     setSettings(saved);
     document.documentElement.lang = saved.uiLocale;
     setModal(null);
+    if (saved.tts.provider === "elevenlabs") {
+      void refreshVoicesList();
+    }
   }
 
-}
-
-
-function LaunchScreen({ status, logs, retry }: { status: "booting" | "ready" | "offline"; logs: string[]; retry: () => Promise<void> }) {
-  const [showConsole, setShowConsole] = useState(false);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle boot logs visibility with CMD + Option + L (or CTRL + Alt + L)
-      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === "l") {
-        e.preventDefault();
-        setShowConsole(prev => !prev);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  return (
-    <main className="launch-screen">
-      <div className="launch-art"><span /><span /><span /><Clapperboard size={38} /></div>
-      <p>LUMIVEO</p>
-      <h1>{status === "offline" ? "The local studio is unavailable" : "Preparing your studio"}</h1>
-      <span>
-        {status === "offline" 
-          ? "Start the local worker, then reconnect. (Press Cmd+Option+L to view connection logs)" 
-          : "Loading projects and render services…"}
-      </span>
-      
-      {showConsole && (
-        <div className="boot-logs-console" style={{
-          marginTop: "24px",
-          marginBottom: "24px",
-          width: "100%",
-          maxWidth: "600px",
-          maxHeight: "220px",
-          background: "#121210",
-          border: "1px solid #2d2d26",
-          borderRadius: "8px",
-          padding: "14px",
-          textAlign: "left",
-          fontFamily: "monospace",
-          fontSize: "12px",
-          color: "#d4d4cb",
-          overflowY: "auto",
-          lineHeight: "1.5"
-        }}>
-          {logs.map((log, idx) => (
-            <div key={idx} style={{ 
-              color: log.includes("CRITICAL ERROR") ? "#ff6b6b" : log.includes("succeeded") || log.includes("successfully") ? "#9be9a8" : "#d4d4cb",
-              marginBottom: "4px"
-            }}>
-              {log}
-            </div>
-          ))}
-          {logs.length === 0 && <div style={{ color: "#7a7a70" }}>Awaiting initialization steps...</div>}
-        </div>
-      )}
-
-      {status === "offline" ? (
-        <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
-          <button className="primary-button" onClick={() => void retry()}><RotateCcw size={15} /> Retry Connection</button>
-          <button className="quiet-button" onClick={() => setShowConsole(prev => !prev)}>
-            {showConsole ? "Hide Logs" : "Show Logs"}
-          </button>
-        </div>
-      ) : <div className="loading-line"><i /></div>}
-    </main>
-  );
-}
-
-function Onboarding({
-  settings,
-  onComplete,
-}: {
-  settings: AppSettings;
-  onComplete: (input: {
-    provider: AppSettings["ai"]["provider"];
-    model: string;
-    endpoint: string;
-    credential: string;
-    analyticsEnabled: boolean;
-  }) => Promise<void>;
-}) {
-  const [provider, setProvider] = useState(settings.ai.provider);
-  const [credential, setCredential] = useState("");
-  const [model, setModel] = useState("");
-  const [endpoint, setEndpoint] = useState("");
-  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const meta = providerMeta[provider];
-  const local = provider === "local";
-  return (
-    <div className="modal-backdrop onboarding-backdrop">
-      <div className="modal onboarding-card">
-        <div className="onboarding-visual"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><span><Sparkles size={32} /></span></div>
-        <div className="onboarding-copy">
-          <span className="kicker">WELCOME TO THE STUDIO</span>
-          <h1>{t(settings.uiLocale, "onboardingTitle")}</h1>
-          <p>{t(settings.uiLocale, "onboardingBody")}</p>
-          <div className="provider-grid">
-            {providerOrder.map((item) => (
-              <button key={item} className={provider === item ? "active" : ""} onClick={() => setProvider(item)}>
-                <span>{item === "local" ? "⌁" : providerMeta[item].label[0]}</span><strong>{providerMeta[item].label}</strong><small>{providerMeta[item].tagline}</small>
-              </button>
-            ))}
-          </div>
-          {!local ? <div className="onboarding-fields">
-            <ModelPicker provider={provider} value={model} onChange={setModel} endpoint={endpoint} credential={credential} />
-            {meta.needsEndpoint ? <label className="field"><span>Endpoint</span><input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder={meta.endpointPlaceholder} /></label> : null}
-            {meta.needsKey ? <>
-              <label className="field"><span>API key {meta.keyOptional ? "(optional)" : ""}</span><input type="password" value={credential} onChange={(event) => setCredential(event.target.value)} placeholder="Stored in macOS Keychain" /></label>
-              {meta.keyUrl ? <KeyLink url={meta.keyUrl} label={meta.keyLabel} /> : null}
-            </> : null}
-          </div> : null}
-          <label className="consent-row"><input type="checkbox" checked={analyticsEnabled} onChange={(event) => setAnalyticsEnabled(event.target.checked)} /><span><strong>{t(settings.uiLocale, "analyticsLabel")}</strong><small>No prompts, content, file paths, names or API keys.</small></span></label>
-          <button className="primary-button onboarding-continue" disabled={busy} onClick={async () => { setBusy(true); await onComplete({ provider, model, endpoint, credential, analyticsEnabled }).finally(() => setBusy(false)); }}>
-            {busy ? <LoaderCircle className="spin" size={16} /> : <Check size={16} />} {t(settings.uiLocale, "continue")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SettingsModal({ settings, onClose, onSave }: { settings: AppSettings; onClose: () => void; onSave: (settings: AppSettings & { credential?: string; ttsCredential?: string }) => Promise<void> }) {
-  const [draft, setDraft] = useState(settings);
-  const [credential, setCredential] = useState("");
-  const [ttsCredential, setTtsCredential] = useState("");
-  const [busy, setBusy] = useState(false);
-  return <ModalFrame title="Studio settings" subtitle="Providers, privacy and language" onClose={onClose}>
-    <div className="settings-sections">
-      <section><h3>Application</h3><div className="field-grid">
-        <label className="field"><span>Interface language</span><select value={draft.uiLocale} onChange={(event) => setDraft({ ...draft, uiLocale: event.target.value })}><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option><option value="ar">العربية</option></select></label>
-        <label className="field"><span>Analytics adapter</span><select value={draft.analyticsProvider} onChange={(event) => setDraft({ ...draft, analyticsProvider: event.target.value as AppSettings["analyticsProvider"] })}><option value="none">None</option><option value="posthog">PostHog</option><option value="firebase">Firebase</option></select></label>
-      </div><label className="consent-row compact"><input type="checkbox" checked={draft.analyticsEnabled} onChange={(event) => setDraft({ ...draft, analyticsEnabled: event.target.checked })} /><span><strong>Send allowlisted events and sanitized exceptions</strong><small>Never includes project content or personal file data.</small></span></label></section>
-      <section><h3>AI provider</h3><div className="field-grid">
-        <label className="field"><span>Provider</span><select value={draft.ai.provider} onChange={(event) => setDraft({ ...draft, ai: { ...draft.ai, provider: event.target.value as AppSettings["ai"]["provider"] } })}>{providerOrder.map((item) => <option key={item} value={item}>{providerMeta[item].label}</option>)}</select></label>
-        <ModelPicker provider={draft.ai.provider} value={draft.ai.model} onChange={(model) => setDraft({ ...draft, ai: { ...draft.ai, model } })} endpoint={draft.ai.endpoint} credential={credential || undefined} />
-      </div>{providerMeta[draft.ai.provider].needsEndpoint ? <label className="field"><span>Endpoint</span><input value={draft.ai.endpoint} onChange={(event) => setDraft({ ...draft, ai: { ...draft.ai, endpoint: event.target.value } })} placeholder={providerMeta[draft.ai.provider].endpointPlaceholder} /></label> : null}{providerMeta[draft.ai.provider].needsKey ? <><label className="field"><span>API key {draft.ai.hasCredential ? "· configured" : ""}{providerMeta[draft.ai.provider].keyOptional ? " · optional" : ""}</span><input type="password" value={credential} onChange={(event) => setCredential(event.target.value)} placeholder="Leave blank to keep current key" /></label>{providerMeta[draft.ai.provider].keyUrl ? <KeyLink url={providerMeta[draft.ai.provider].keyUrl!} label={providerMeta[draft.ai.provider].keyLabel} /> : null}</> : null}</section>
-      <section><h3>Voiceover</h3><div className="field-grid"><label className="field"><span>Provider</span><select value={draft.tts.provider} onChange={(event) => setDraft({ ...draft, tts: { ...draft.tts, provider: event.target.value as AppSettings["tts"]["provider"] } })}><option value="none">None</option><option value="elevenlabs">ElevenLabs</option></select></label><label className="field"><span>Voice ID</span><input value={draft.tts.voiceId} onChange={(event) => setDraft({ ...draft, tts: { ...draft.tts, voiceId: event.target.value } })} /></label></div><label className="field"><span>TTS key {draft.tts.hasCredential ? "· configured" : ""}</span><input type="password" value={ttsCredential} onChange={(event) => setTtsCredential(event.target.value)} placeholder="Stored in macOS Keychain" /></label><KeyLink url={ttsKeyUrl} label="elevenlabs.io/app/settings/api-keys" /></section>
-    </div>
-    <div className="modal-actions"><button className="quiet-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={busy} onClick={async () => { setBusy(true); await onSave({ ...draft, credential, ttsCredential }).finally(() => setBusy(false)); }}>{busy ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />} Save settings</button></div>
-  </ModalFrame>;
-}
-
-function LocaleModal({ project, busy, onClose, onGenerate }: { project: Project; busy: boolean; onClose: () => void; onGenerate: (locale: string) => void }) {
-  const [locale, setLocale] = useState("es");
-  return <ModalFrame title="Add a localised edition" subtitle={`Source language: ${project.sourceLocale}`} onClose={onClose}>
-    <div className="locale-options">{[{ code: "es", label: "Español", sample: "Una historia clara" }, { code: "fr", label: "Français", sample: "Une histoire claire" }, { code: "de", label: "Deutsch", sample: "Eine klare Geschichte" }, { code: "zh-CN", label: "简体中文", sample: "清晰讲述产品故事" }, { code: "ar", label: "العربية", sample: "قصة واضحة لمنتجك" }, { code: "ja", label: "日本語", sample: "製品の魅力を明確に" }].map((item) => <button key={item.code} className={locale === item.code ? "active" : ""} onClick={() => setLocale(item.code)}><span>{item.code.toUpperCase()}</span><strong>{item.label}</strong><small>{item.sample}</small></button>)}</div>
-    <p className="privacy-note">Only scene text and product context are sent to the configured provider. Imported media stays on this Mac.</p>
-    <div className="modal-actions"><button className="quiet-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={busy} onClick={() => onGenerate(locale)}>{busy ? <LoaderCircle className="spin" size={15} /> : <Languages size={15} />} Generate locale</button></div>
-  </ModalFrame>;
-}
-
-function ProposalModal({ proposal, busy, onClose, onApply }: { proposal: StoryboardProposal; busy: boolean; onClose: () => void; onApply: () => void }) {
-  return <ModalFrame title={proposal.operation === "translation" ? `Localised draft · ${proposal.locale}` : "Storyboard draft"} subtitle={`${proposal.provider} · ${proposal.model}`} onClose={onClose} wide>
-    <p className="proposal-summary">{proposal.summary}</p><div className="proposal-scenes">{proposal.scenes.map((scene, index) => <article key={`${scene.sourceSceneId}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{scene.name}</strong><p>{scene.caption}</p><small>{scene.narration}</small></div><em>{scene.durationSeconds.toFixed(1)}s</em></article>)}</div>
-    <div className="modal-actions"><button className="quiet-button" onClick={onClose}>Discard</button><button className="primary-button" disabled={busy} onClick={onApply}>{busy ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />} Accept draft</button></div>
-  </ModalFrame>;
-}
-
-function ExportModal({ project, job, onClose, onStart, onCancel }: { project: Project; job: RenderJob | null; onClose: () => void; onStart: (input: { preset: ExportPreset; format: ExportFormat; locale: string }) => Promise<void>; onCancel: () => void }) {
-  const [preset, setPreset] = useState<ExportPreset>("portrait");
-  const [format, setFormat] = useState<ExportFormat>("mp4");
-  const [locale, setLocale] = useState(project.activeLocale);
-  const active = job && ["queued", "running"].includes(job.status);
-  return <ModalFrame title="Export master" subtitle="Render locally on this Mac" onClose={onClose}>
-    {job ? <div className={`render-status ${job.status}`}><div className="render-status-head"><span>{job.status === "completed" ? <Check size={20} /> : job.status === "failed" ? <CircleAlert size={20} /> : <LoaderCircle className={active ? "spin" : ""} size={20} />}</span><div><strong>{job.status === "completed" ? "Export complete" : job.status === "failed" ? "Export failed" : "Rendering your demo"}</strong><small>{job.output_path ?? job.error_code ?? `${Math.round(job.progress * 100)}%`}</small></div></div><div className="progress-track"><i style={{ width: `${job.progress * 100}%` }} /></div></div> : <>
-      <div className="export-presets">{(["portrait", "landscape", "square"] as const).map((item) => <button key={item} className={preset === item ? "active" : ""} onClick={() => setPreset(item)}><span className={`frame-icon ${item}`} /><strong>{item}</strong><small>{presetDimensions[item].width} × {presetDimensions[item].height}</small></button>)}</div>
-      <div className="field-grid"><label className="field"><span>Format</span><select value={format} onChange={(event) => setFormat(event.target.value as ExportFormat)}><option value="mp4">MP4 · H.264</option><option value="gif">Animated GIF</option><option value="png-sequence">PNG sequence</option></select></label><label className="field"><span>Content locale</span><select value={locale} onChange={(event) => setLocale(event.target.value)}>{project.locales.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}</select></label></div>
-      <div className="export-summary"><span>Duration</span><strong>{(durationFor(project) / project.fps).toFixed(1)} seconds</strong><span>Frames</span><strong>{durationFor(project).toLocaleString()}</strong></div>
-    </>}
-    <div className="modal-actions"><button className="quiet-button" onClick={active ? onCancel : onClose}>{active ? "Cancel render" : "Close"}</button>{!job ? <button className="primary-button" onClick={() => void onStart({ preset, format, locale })}><Download size={15} /> Start export</button> : null}</div>
-  </ModalFrame>;
-}
-
-function ModalFrame({ title, subtitle, onClose, wide, children }: { title: string; subtitle: string; onClose: () => void; wide?: boolean; children: React.ReactNode }) {
-  return <div className="modal-backdrop"><div className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true"><div className="modal-header"><div><span className="kicker">LUMIVEO</span><h2>{title}</h2><p>{subtitle}</p></div><button className="icon-button" onClick={onClose}><X size={18} /></button></div>{children}</div></div>;
-}
-
-function updateSceneCopy(updateScene: (updater: (scene: Scene) => Scene) => void, scene: Scene, locale: string, field: "caption" | "narration", value: string) {
-  const fallback = scene.copy[locale] ?? scene.copy[Object.keys(scene.copy)[0]] ?? { caption: "", narration: "", manuallyEdited: false, stale: false };
-  updateScene((current) => ({ ...current, copy: { ...current.copy, [locale]: { ...fallback, [field]: value, manuallyEdited: true, stale: false } } }));
-}
-
-function addScene(project: Project, updateProject: (updater: (current: Project) => Project) => void, select: (id: string) => void) {
-  const id = crypto.randomUUID();
-  const locale = project.activeLocale;
-  const scene: Scene = { id, name: `Scene ${project.scenes.length + 1}`, assetId: null, durationInFrames: project.fps * 3, transition: "fade", layout: "device", background: "#171714", accent: "#e6ff5c", copy: { [locale]: { caption: "Describe the next product moment.", narration: "Explain what the user can accomplish here.", manuallyEdited: false, stale: false } } };
-  updateProject((current) => ({ ...current, scenes: [...current.scenes, scene] }));
-  select(id);
-}
-
-function normalizeDialogPaths(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
-  if (typeof value === "string") return [value];
-  if (value && typeof value === "object" && "paths" in value && Array.isArray(value.paths)) return value.paths.filter((item): item is string => typeof item === "string");
-  return [];
-}
-
-function mimeFromPath(path: string) {
-  const extension = path.split(".").pop()?.toLowerCase();
-  if (["png", "jpg", "jpeg", "webp", "heic"].includes(extension ?? "")) return `image/${extension === "jpg" ? "jpeg" : extension}`;
-  if (extension === "gif") return "image/gif";
-  if (["mp4", "mov", "webm", "m4v"].includes(extension ?? "")) return extension === "mov" ? "video/quicktime" : `video/${extension}`;
-  if (["mp3", "wav", "m4a", "aac"].includes(extension ?? "")) return `audio/${extension}`;
-  return "application/octet-stream";
 }
 
 declare global {

@@ -5,7 +5,7 @@
  * live catalog response always wins.
  */
 
-export type ProviderKind = "local" | "eve" | "openai" | "anthropic" | "google" | "custom";
+export type ProviderKind = "local" | "openai" | "anthropic" | "google" | "custom";
 
 export interface ProviderModel {
   id: string;
@@ -35,21 +35,6 @@ const curated: Record<Exclude<ProviderKind, "local" | "custom">, ProviderModel[]
   openai: ["gpt-5.5", "gpt-5-mini", "gpt-4.1", "gpt-4.1-mini", "o4-mini"].map(curate),
   anthropic: ["claude-opus-4-8", "claude-sonnet-4-5", "claude-haiku-4-5"].map(curate),
   google: ["gemini-3-pro", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"].map(curate),
-  eve: [
-    "anthropic/claude-sonnet-5",
-    "anthropic/claude-opus-4.8",
-    "openai/gpt-5.5",
-    "google/gemini-3-pro",
-    "moonshotai/kimi-k2",
-    "moonshotai/kimi-k2-thinking",
-    "deepseek/deepseek-v3.2",
-    "meta/llama-4-maverick",
-    "alibaba/qwen3-235b-a22b",
-    "zai/glm-4.7",
-    "minimax/minimax-m2",
-    "mistral/mistral-large-3",
-    "openai/gpt-oss-120b",
-  ].map(curate),
 };
 
 function curate(id: string): ProviderModel {
@@ -136,13 +121,6 @@ async function fetchLive(
   if (kind === "google") {
     const url = `${base(endpoint, "https://generativelanguage.googleapis.com")}/v1beta/models?key=${encodeURIComponent(credential ?? "")}`;
     return parseGoogleModelList(await okJson(await fetch(url, { signal })));
-  }
-  if (kind === "eve") {
-    const response = await fetch("https://ai-gateway.vercel.sh/v1/models", {
-      headers: credential ? { authorization: `Bearer ${credential}` } : {},
-      signal,
-    });
-    return parseGatewayModelList(await okJson(response));
   }
   // custom: any OpenAI-compatible endpoint (OpenRouter, Groq, opencode-style
   // gateways, Ollama at http://127.0.0.1:11434/v1, LM Studio, ...).

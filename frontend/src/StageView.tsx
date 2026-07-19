@@ -1,5 +1,5 @@
 import { Player } from "@remotion/player";
-import { Maximize, Minus, Plus } from "lucide-react";
+import { Maximize, Minimize, Minus, Plus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { workerToken, workerUrl } from "./api";
 import type { ExportPreset, Project } from "./types";
@@ -27,6 +27,19 @@ export function StageView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    };
+    if (isFullscreen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -57,7 +70,7 @@ export function StageView({
   const zoomIn = () => setZoom((value) => Math.min(MAX_ZOOM, value * ZOOM_STEP));
 
   return (
-    <div className="canvas-stage">
+    <div className={`canvas-stage${isFullscreen ? " fullscreen" : ""}`}>
       <div className="canvas-scroll" ref={scrollRef}>
         {fit > 0 ? (
           <div className="canvas-frame" style={{ width: frameWidth, height: frameHeight }}>
@@ -97,8 +110,11 @@ export function StageView({
           <Plus size={14} />
         </button>
         <span className="zoom-divider" />
-        <button onClick={() => setZoom(1)} disabled={zoom === 1} title="Fit to stage">
-          <Maximize size={13} />
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          title={isFullscreen ? "Exit Full Screen (Esc)" : "Enter Full Screen"}
+        >
+          {isFullscreen ? <Minimize size={13} /> : <Maximize size={13} />}
         </button>
       </div>
     </div>

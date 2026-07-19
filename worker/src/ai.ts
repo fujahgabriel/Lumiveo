@@ -1,4 +1,7 @@
-import { Client } from "eve/client";
+import { generateObject, generateText, type LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogle } from "@ai-sdk/google";
 import { z } from "zod";
 import type { AppDatabase } from "./db.js";
 import type { ProjectStore } from "./project-store.js";
@@ -12,13 +15,20 @@ const proposedSceneSchema = z.object({
   caption: z.string().min(1).max(500),
   narration: z.string().min(1).max(2_000),
   durationSeconds: z.number().min(1).max(60),
-  layout: z.enum(["device", "full", "split"]),
+  layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]),
   transition: z.enum(["none", "fade", "slide", "scale"]),
 });
 
 const storyboardSchema = z.object({
   summary: z.string().max(500),
   scenes: z.array(proposedSceneSchema).min(1).max(40),
+});
+
+const sceneRegenSchema = z.object({
+  caption: z.string().max(500).optional(),
+  narration: z.string().max(2_000).optional(),
+  name: z.string().max(120).optional(),
+  layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]).optional(),
 });
 
 export type StoryboardProposal = z.infer<typeof storyboardSchema> & {
@@ -29,8 +39,11 @@ export type StoryboardProposal = z.infer<typeof storyboardSchema> & {
   operation: GenerationRequest["operation"];
 };
 
+export type SceneRegeneration = z.infer<typeof sceneRegenSchema>;
+
 interface AiProvider {
   generate(project: Project, request: GenerationRequest): Promise<z.infer<typeof storyboardSchema>>;
+  regenerateScene(project: Project, sceneId: string, fields: string[]): Promise<SceneRegeneration>;
   test(): Promise<void>;
 }
 
@@ -42,7 +55,7 @@ export class AiService {
   ) {}
 
   async configure(input: {
-    provider: "local" | "eve" | "openai" | "anthropic" | "google";
+    provider: "local" | "openai" | "anthropic" | "google";
     model: string;
     endpoint: string;
     credential?: string;
@@ -69,6 +82,16 @@ export class AiService {
     const provider = await this.provider(settings.ai.provider);
     await provider.test();
     return { ok: true };
+  }
+
+  async regenerateScene(projectId: string, sceneId: string, fields: string[]): Promise<SceneRegeneration> {
+    const project = await this.projects.get(projectId);
+    if (!project) throw new Error("project_not_found");
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene) throw new Error("scene_not_found");
+    const settings = this.database.getSettings();
+    const provider = await this.provider(settings.ai.provider);
+    return provider.regenerateScene(project, sceneId, fields);
   }
 
   async generate(request: GenerationRequest): Promise<StoryboardProposal> {
@@ -148,6 +171,21 @@ export class AiService {
             stale: false,
           },
         },
+        showLogo: false,
+        logoAssetId: null,
+        logoWidth: 120,
+        logoHeight: 120,
+        logoRadius: 20,
+        textColor: project.scenes[index]?.textColor ?? "#f7f7f2",
+        fontFamily: project.scenes[index]?.fontFamily ?? "Inter",
+        fontSize: project.scenes[index]?.fontSize ?? 40,
+        fontWeight: project.scenes[index]?.fontWeight ?? "bold",
+        fontStyle: project.scenes[index]?.fontStyle ?? "normal",
+        mediaFit: project.scenes[index]?.mediaFit ?? "cover",
+        mediaX: project.scenes[index]?.mediaX ?? 50,
+        mediaY: project.scenes[index]?.mediaY ?? 50,
+        devicePreset: project.scenes[index]?.devicePreset ?? "iphone-6.7",
+        voiceId: project.scenes[index]?.voiceId ?? null,
       }));
     }
     const locales = project.locales.some((entry) => entry.code === locale)
@@ -160,10 +198,9 @@ export class AiService {
     return saved;
   }
 
-  private async provider(kind: "local" | "eve" | "openai" | "anthropic" | "google" | "custom") {
+  private async provider(kind: string) {
     const settings = this.database.getSettings().ai;
     const credential = await this.secrets.get(`ai:${kind}`);
-    if (kind === "eve") return new EveProvider(settings.endpoint || "http://127.0.0.1:2000");
     if (kind === "custom") {
       return new JsonApiProvider(
         "openai",
@@ -173,19 +210,8 @@ export class AiService {
         true,
       );
     }
-    if (kind === "openai") {
-      return new JsonApiProvider("openai", settings.model || "gpt-5-mini", credential, settings.endpoint);
-    }
-    if (kind === "anthropic") {
-      return new JsonApiProvider(
-        "anthropic",
-        settings.model || "claude-sonnet-4-5",
-        credential,
-        settings.endpoint,
-      );
-    }
-    if (kind === "google") {
-      return new JsonApiProvider("google", settings.model || "gemini-2.5-flash", credential, settings.endpoint);
+    if (kind === "openai" || kind === "anthropic" || kind === "google") {
+      return new AiSdkProvider(kind, settings.model, credential, settings.endpoint);
     }
     return new LocalProvider();
   }
@@ -193,6 +219,29 @@ export class AiService {
 
 class LocalProvider implements AiProvider {
   async test() {}
+
+  async regenerateScene(project: Project, sceneId: string, fields: string[]) {
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene) throw new Error("scene_not_found");
+    const locale = project.activeLocale;
+    const copy = scene.copy[locale] ?? scene.copy[project.sourceLocale];
+    const result: SceneRegeneration = {};
+    if (fields.includes("caption")) {
+      result.caption = copy?.caption ?? "Show what matters most to your users.";
+    }
+    if (fields.includes("narration")) {
+      result.narration = copy?.narration ?? "Walk through this feature and explain the user benefit.";
+    }
+    if (fields.includes("name")) {
+      result.name = scene.name;
+    }
+    if (fields.includes("layout")) {
+      const layouts: SceneRegeneration["layout"][] = ["device", "full", "split", "minimal", "gradient", "highlight"];
+      const currentIndex = layouts.indexOf(scene.layout);
+      result.layout = layouts[(currentIndex + 1) % layouts.length];
+    }
+    return result;
+  }
 
   async generate(project: Project, request: GenerationRequest) {
     const locale = request.locale ?? project.sourceLocale;
@@ -235,22 +284,79 @@ class LocalProvider implements AiProvider {
   }
 }
 
-class EveProvider implements AiProvider {
-  constructor(private readonly endpoint: string) {}
+class AiSdkProvider implements AiProvider {
+  private languageModel: LanguageModel;
+
+  constructor(
+    private readonly kind: "openai" | "anthropic" | "google",
+    private readonly modelId: string,
+    private readonly credential: string | null,
+    private readonly endpoint: string,
+  ) {
+    const baseURL = this.endpoint || undefined;
+    const apiKey = credential ?? undefined;
+    if (kind === "openai") {
+      this.languageModel = createOpenAI({ apiKey, baseURL })(modelId || "gpt-5-mini");
+    } else if (kind === "anthropic") {
+      this.languageModel = createAnthropic({ apiKey, baseURL })(modelId || "claude-sonnet-4-5");
+    } else {
+      this.languageModel = createGoogle({ apiKey, baseURL })(modelId || "gemini-2.5-flash");
+    }
+  }
 
   async test() {
-    await new Client({ host: this.endpoint }).health();
+    if (!this.credential) throw new Error("missing_provider_credential");
+    await generateText({ model: this.languageModel, messages: [{ role: "user", content: "OK" }] });
+  }
+
+  async regenerateScene(project: Project, sceneId: string, fields: string[]) {
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene) throw new Error("scene_not_found");
+    const result: SceneRegeneration = {};
+    const textFields = fields.filter((f) => f !== "layout");
+    if (textFields.length > 0) {
+      if (!this.credential) throw new Error("missing_provider_credential");
+      const { object } = await generateObject({
+        model: this.languageModel,
+        schema: sceneRegenSchema,
+        messages: [
+          {
+            role: "user",
+            content: [
+              `Project: ${project.productName || project.title}`,
+              `Scene: ${scene.name}`,
+              `Current caption: "${scene.copy[project.sourceLocale]?.caption}"`,
+              `Current narration: "${scene.copy[project.sourceLocale]?.narration}"`,
+              `Regenerate ${textFields.join(", ")} based on the scene context.`,
+            ].join("\n"),
+          },
+        ],
+      });
+      if (fields.includes("caption")) result.caption = object.caption;
+      if (fields.includes("narration")) result.narration = object.narration;
+      if (fields.includes("name")) result.name = object.name;
+    }
+    if (fields.includes("layout")) {
+      const layouts: SceneRegeneration["layout"][] = ["device", "full", "split", "minimal", "gradient", "highlight"];
+      const currentIndex = layouts.indexOf(scene.layout);
+      result.layout = layouts[(currentIndex + 1) % layouts.length];
+    }
+    return result;
   }
 
   async generate(project: Project, request: GenerationRequest) {
-    const client = new Client({ host: this.endpoint, redirect: "error" });
-    const response = await client.session().send<z.infer<typeof storyboardSchema>>({
-      message: promptFor(project, request),
-      outputSchema: storyboardSchema,
+    if (!this.credential) throw new Error("missing_provider_credential");
+    const { object } = await generateObject({
+      model: this.languageModel,
+      schema: storyboardSchema,
+      messages: [
+        {
+          role: "user",
+          content: promptFor(project, request),
+        },
+      ],
     });
-    const result = await response.result();
-    if (result.status === "failed" || !result.data) throw new Error("eve_generation_failed");
-    return storyboardSchema.parse(result.data);
+    return storyboardSchema.parse(object);
   }
 }
 
@@ -263,11 +369,39 @@ class JsonApiProvider implements AiProvider {
     private readonly optionalCredential = false,
   ) {}
 
+  async regenerateScene(project: Project, sceneId: string, fields: string[]) {
+    const scene = project.scenes.find((s) => s.id === sceneId);
+    if (!scene) throw new Error("scene_not_found");
+    const result: SceneRegeneration = {};
+    const textFields = fields.filter((f) => f !== "layout");
+    if (textFields.length > 0) {
+      if (!this.credential && !this.optionalCredential) throw new Error("missing_provider_credential");
+      const prompt = `Project: ${project.productName || project.title}. Scene: ${scene.name}. Current caption: "${scene.copy[project.sourceLocale]?.caption}". Current narration: "${scene.copy[project.sourceLocale]?.narration}". Regenerate ${textFields.join(", ")} based on the scene context. Return JSON only matching: ${JSON.stringify(jsonShape)}.`;
+      const response = await fetch(this.generateUrl(), {
+        method: "POST",
+        headers: { ...this.headers(), "content-type": "application/json" },
+        body: JSON.stringify(this.body(prompt)),
+      });
+      if (!response.ok) throw new Error(`provider_http_${response.status}`);
+      const payload = (await response.json()) as Record<string, unknown>;
+      const parsed = sceneRegenSchema.parse(parseJson(extractText(this.kind, payload)));
+      if (fields.includes("caption")) result.caption = parsed.caption;
+      if (fields.includes("narration")) result.narration = parsed.narration;
+      if (fields.includes("name")) result.name = parsed.name;
+    }
+    if (fields.includes("layout")) {
+      const layouts: SceneRegeneration["layout"][] = ["device", "full", "split", "minimal", "gradient", "highlight"];
+      const currentIndex = layouts.indexOf(scene.layout);
+      result.layout = layouts[(currentIndex + 1) % layouts.length];
+    }
+    return result;
+  }
+
   async test() {
     if (!this.credential && !this.optionalCredential) {
       throw new Error("missing_provider_credential");
     }
-    const response = await fetch(this.testUrl(), { headers: this.headers() });
+    const response = await fetch(this.testUrl(), { headers: this.headers(), signal: AbortSignal.timeout(8_000) });
     if (!response.ok) throw new Error(`provider_http_${response.status}`);
   }
 

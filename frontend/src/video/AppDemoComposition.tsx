@@ -22,8 +22,17 @@ export function AppDemoComposition(props: VideoProps) {
         const from = start;
         start += scene.durationInFrames;
         const asset = props.project.assets.find((entry) => entry.id === scene.assetId);
+        
+        // Find if this scene has any audio assets associated with it to play as voiceover/soundtrack
+        const sceneAudioAssets = props.project.assets.filter((a: Asset) => a.mediaType === "audio" && (a.name === `voiceover-${scene.id}.mp3` || a.name.includes(scene.id)));
+        const activeAudio = sceneAudioAssets[sceneAudioAssets.length - 1]; // Use the most recently generated voiceover for this scene
+        const audioUrl = activeAudio
+          ? `${props.assetBaseUrl.replace(/\/$/, "")}/${activeAudio.id}?token=${encodeURIComponent(props.workerToken)}`
+          : null;
+
         return (
           <Sequence key={scene.id} from={from} durationInFrames={scene.durationInFrames}>
+            {audioUrl && <Audio src={audioUrl} />}
             <DemoScene
               scene={scene}
               asset={asset}
@@ -76,15 +85,20 @@ function DemoScene({
     ? `${assetBaseUrl.replace(/\/$/, "")}/${asset.id}?token=${encodeURIComponent(token)}`
     : null;
 
+  const logoUrl = scene.logoAssetId
+    ? `${assetBaseUrl.replace(/\/$/, "")}/${scene.logoAssetId}?token=${encodeURIComponent(token)}`
+    : null;
+
   return (
     <AbsoluteFill
       style={{
         backgroundColor: scene.background,
-        color: "#f7f7f2",
+        color: scene.textColor ?? "#f7f7f2",
         opacity: exit,
         overflow: "hidden",
-        fontFamily:
-          'Inter, "SF Pro Display", "Noto Sans Arabic", "Noto Sans CJK SC", system-ui, sans-serif',
+        fontFamily: scene.fontFamily
+          ? `"${scene.fontFamily}", Inter, "SF Pro Display", system-ui, sans-serif`
+          : 'Inter, "SF Pro Display", "Noto Sans Arabic", "Noto Sans CJK SC", system-ui, sans-serif',
       }}
     >
       <div
@@ -146,13 +160,28 @@ function DemoScene({
               textTransform: "uppercase",
             }}
           >
-            <span style={{ width: 34, height: 4, borderRadius: 99, background: scene.accent }} />
+            {scene.showLogo && logoUrl ? (
+              <Img
+                src={logoUrl}
+                style={{
+                  width: scene.logoWidth ?? 120,
+                  height: scene.logoHeight ?? 120,
+                  borderRadius: scene.logoRadius ?? 20,
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <span style={{ width: 34, height: 4, borderRadius: 99, background: scene.accent }} />
+            )}
             {scene.name}
           </div>
           <div
             style={{
-              fontSize: captionSize(copy?.caption ?? "", preset),
-              fontWeight: 720,
+              fontSize: scene.fontSize ? `${scene.fontSize}px` : captionSize(copy?.caption ?? "", preset),
+              fontWeight: scene.fontWeight ?? 720,
+              fontStyle: scene.fontStyle ?? "normal",
+              color: scene.textColor ?? "#f7f7f2",
+              fontFamily: scene.fontFamily ? `"${scene.fontFamily}"` : undefined,
               lineHeight: 1.04,
               letterSpacing: "-0.045em",
               textWrap: "balance",
@@ -176,16 +205,32 @@ function MediaFrame({
   scene: Scene;
   projectId: string;
 }) {
+  const isMinimal = scene.layout === "minimal";
+  const isGradient = scene.layout === "gradient";
+  const isHighlight = scene.layout === "highlight";
+  const isSpecial = isMinimal || isGradient || isHighlight;
+
   const frameStyle: React.CSSProperties = {
     position: "relative",
-    aspectRatio: scene.layout === "full" ? "16 / 10" : "9 / 16",
+    aspectRatio: (scene.layout === "full" || isGradient) 
+      ? "16 / 10" 
+      : (devicePresets[scene.devicePreset ?? "iphone-6.7"]?.ratio ?? "1290 / 2796"),
     maxHeight: 1120,
     margin: "0 auto",
-    borderRadius: scene.layout === "full" ? 38 : 64,
-    background: "#23231f",
-    border: scene.layout === "full" ? "1px solid rgba(255,255,255,.16)" : "14px solid #0a0a09",
-    boxShadow: "0 48px 120px rgba(0,0,0,.48), inset 0 0 0 1px rgba(255,255,255,.08)",
+    borderRadius: (scene.layout === "full" || isSpecial) ? 38 : 64,
+    background: isGradient ? `linear-gradient(135deg, ${scene.accent}22, ${scene.accent}66)` : isMinimal ? "transparent" : "#23231f",
+    border: (scene.layout === "full" || isSpecial) 
+      ? isMinimal ? "2px dashed rgba(255,255,255,.2)" : isHighlight ? `4px solid ${scene.accent}` : "1px solid rgba(255,255,255,.16)" 
+      : "14px solid #0a0a09",
+    boxShadow: isMinimal ? "none" : "0 48px 120px rgba(0,0,0,.48), inset 0 0 0 1px rgba(255,255,255,.08)",
     overflow: "hidden",
+  };
+
+  const computedMediaStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: scene.mediaFit ?? "cover",
+    objectPosition: `${scene.mediaX ?? 50}% ${scene.mediaY ?? 50}%`,
   };
 
   return (
@@ -193,18 +238,18 @@ function MediaFrame({
       {!asset || !src ? (
         <Placeholder accent={scene.accent} />
       ) : asset.mediaType === "video" ? (
-        <OffthreadVideo src={src} muted style={mediaStyle} />
+        <OffthreadVideo src={src} muted style={computedMediaStyle} />
       ) : asset.mediaType === "gif" ? (
-        <Gif src={src} fit="cover" style={mediaStyle} />
+        <Gif src={src} fit={scene.mediaFit === "none" ? "cover" : (scene.mediaFit ?? "cover")} style={computedMediaStyle} />
       ) : asset.mediaType === "audio" ? (
         <>
           <Audio src={src} />
           <AudioPlaceholder accent={scene.accent} />
         </>
       ) : (
-        <Img src={src} style={mediaStyle} />
+        <Img src={src} style={computedMediaStyle} />
       )}
-      {scene.layout !== "full" ? (
+      {(scene.layout !== "full" && !isSpecial) ? (
         <div
           style={{
             position: "absolute",
@@ -246,6 +291,17 @@ function Placeholder({ accent }: { accent: string }) {
     </AbsoluteFill>
   );
 }
+
+export const devicePresets: Record<string, { label: string; ratio: string }> = {
+  "iphone-6.9": { label: 'iPhone 6.9" (16 Pro Max)', ratio: "1320 / 2868" },
+  "iphone-6.7": { label: 'iPhone 6.7" (15 Plus, 14 Pro Max)', ratio: "1290 / 2796" },
+  "iphone-6.1": { label: 'iPhone 6.1" (16, 15 Pro, 14)', ratio: "1179 / 2556" },
+  "ipad-13": { label: 'iPad Pro 13"', ratio: "2064 / 2752" },
+  "ipad-12.9": { label: 'iPad Pro 12.9"', ratio: "2048 / 2732" },
+  "ipad-11": { label: 'iPad Pro/Air 11"', ratio: "1668 / 2388" },
+  "google-phone": { label: "Google Play Phone", ratio: "1080 / 1920" },
+  "google-tablet": { label: "Google Play 10\" Tablet", ratio: "1200 / 1920" },
+};
 
 function AudioPlaceholder({ accent }: { accent: string }) {
   const frame = useCurrentFrame();

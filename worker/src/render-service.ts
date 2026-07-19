@@ -142,6 +142,7 @@ export class RenderService {
           outputDir,
           imageFormat: "png",
           cancelSignal,
+          scale: request.scale ?? 1,
           onStart: () => undefined,
           onFrameUpdate: (framesRendered) =>
             syncProgress(framesRendered / composition.durationInFrames),
@@ -160,6 +161,7 @@ export class RenderService {
         codec: request.format === "gif" ? "gif" : "h264",
         overwrite: true,
         cancelSignal,
+        scale: request.scale ?? 1,
         chromiumOptions: { enableMultiProcessOnLinux: true },
         onProgress: ({ progress: p }) => syncProgress(p),
       });
