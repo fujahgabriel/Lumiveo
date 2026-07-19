@@ -20,7 +20,9 @@ export function AppDemoComposition(props: VideoProps) {
   
   const bgAudioUrl = props.project.backgroundAudioId
     ? `${props.assetBaseUrl.replace(/\/$/, "")}/${props.project.backgroundAudioId}?token=${encodeURIComponent(props.workerToken || "")}`
-    : props.project.backgroundAudioUrl || null;
+    : props.project.backgroundAudioUrl
+      ? `${props.assetBaseUrl.split("/v1/")[0]}/v1/system/proxy?url=${encodeURIComponent(props.project.backgroundAudioUrl)}&token=${encodeURIComponent(props.workerToken || "")}`
+      : null;
 
   return (
     <AbsoluteFill style={{ backgroundColor: "#11110f" }}>

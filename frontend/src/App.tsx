@@ -197,6 +197,8 @@ export default function App() {
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [playingBgMusic, setPlayingBgMusic] = useState(false);
+  const bgMusicPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const togglePlayAudio = (assetId: string) => {
     if (playingAudioId === assetId) {
@@ -214,9 +216,36 @@ export default function App() {
     }
   };
 
+  const togglePlayBgMusic = () => {
+    if (playingBgMusic) {
+      bgMusicPlayerRef.current?.pause();
+      setPlayingBgMusic(false);
+    } else {
+      if (bgMusicPlayerRef.current) {
+        bgMusicPlayerRef.current.pause();
+      }
+      const rawUrl = project?.backgroundAudioId
+        ? assetUrl(project.id, project.backgroundAudioId)
+        : project?.backgroundAudioUrl || null;
+        
+      if (!rawUrl) return;
+      
+      const finalUrl = rawUrl.startsWith("http") && !rawUrl.includes("127.0.0.1")
+        ? `${workerUrl}/v1/system/proxy?url=${encodeURIComponent(rawUrl)}&token=${encodeURIComponent(workerToken)}`
+        : rawUrl;
+
+      bgMusicPlayerRef.current = new Audio(finalUrl);
+      bgMusicPlayerRef.current.volume = project?.backgroundAudioVolume ?? 0.15;
+      bgMusicPlayerRef.current.onended = () => setPlayingBgMusic(false);
+      void bgMusicPlayerRef.current.play();
+      setPlayingBgMusic(true);
+    }
+  };
+
   useEffect(() => {
     return () => {
       audioPlayerRef.current?.pause();
+      bgMusicPlayerRef.current?.pause();
     };
   }, [project?.id]);
 
@@ -1195,12 +1224,37 @@ export default function App() {
         <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
           <h4 style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-3)" }}>Soundtrack</h4>
           
-          <label className="field">
-            <span>Background Music</span>
+          <div className="field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div className="field-label-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Background Music</span>
+              {(project.backgroundAudioUrl || project.backgroundAudioId) && (
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={togglePlayBgMusic}
+                  style={{
+                    fontSize: "11px",
+                    padding: "2px 8px",
+                    background: playingBgMusic ? "var(--accent)" : "var(--bg-hover)",
+                    color: playingBgMusic ? "#000" : "var(--text-1)",
+                    borderRadius: "12px",
+                    fontWeight: "bold",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {playingBgMusic ? "Pause Preview" : "Play Preview"}
+                </button>
+              )}
+            </div>
             <select
               value={project.backgroundAudioUrl || project.backgroundAudioId || ""}
               onChange={(event) => {
                 const val = event.target.value;
+                if (bgMusicPlayerRef.current) {
+                  bgMusicPlayerRef.current.pause();
+                  setPlayingBgMusic(false);
+                }
                 if (!val) {
                   updateProject((current) => ({ ...current, backgroundAudioUrl: null, backgroundAudioId: null }));
                 } else if (val.startsWith("http")) {
@@ -1225,7 +1279,7 @@ export default function App() {
                 </optgroup>
               )}
             </select>
-          </label>
+          </div>
 
           {(project.backgroundAudioUrl || project.backgroundAudioId) && (
             <>
@@ -1238,7 +1292,13 @@ export default function App() {
                     max={1}
                     step={0.05}
                     value={project.backgroundAudioVolume ?? 0.15}
-                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioVolume: Number(event.target.value) }))}
+                    onChange={(event) => {
+                      const val = Number(event.target.value);
+                      updateProject((current) => ({ ...current, backgroundAudioVolume: val }));
+                      if (bgMusicPlayerRef.current) {
+                        bgMusicPlayerRef.current.volume = val;
+                      }
+                    }}
                   />
                 </label>
                 <div className="field" style={{ visibility: "hidden" }} />

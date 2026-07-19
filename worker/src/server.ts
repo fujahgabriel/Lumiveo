@@ -385,6 +385,33 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 200, { ok: true });
     return;
   }
+  if (request.method === "GET" && url.pathname === "/v1/system/proxy") {
+    try {
+      const targetUrl = url.searchParams.get("url");
+      if (!targetUrl) throw new Error("missing_url");
+      
+      const res = await fetch(targetUrl, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) throw new Error(`proxy_http_${res.status}`);
+      
+      const contentType = res.headers.get("content-type") || "audio/mpeg";
+      response.writeHead(200, {
+        "content-type": contentType,
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=86400",
+      });
+      
+      const bodyNode = res.body;
+      if (bodyNode) {
+        const { Readable } = await import("node:stream");
+        Readable.from(bodyNode as any).pipe(response);
+      } else {
+        response.end();
+      }
+    } catch (e: any) {
+      json(response, 500, { error: e?.message || "proxy_failed" });
+    }
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/v1/tts/voices") {
     try {
       const voices = await tts.listVoices();
