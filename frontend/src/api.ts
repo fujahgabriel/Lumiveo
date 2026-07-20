@@ -171,6 +171,9 @@ export const api = {
     projectId: string;
     operation: "storyboard" | "translation" | "scene";
     locale?: string;
+    industry?: string;
+    tone?: string;
+    creativity?: "conservative" | "balanced" | "creative" | "experimental";
   }) =>
     request<StoryboardProposal>("/v1/generations", {
       method: "POST",

@@ -24,6 +24,13 @@ interface SceneDraft {
   durationInFrames: number;
   background: string;
   accent: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: string;
+  fontStyle: string;
+  textColor: string;
+  textTransition: Scene["textTransition"];
+  devicePreset: string;
 }
 
 export function ProjectWizard({
@@ -37,6 +44,9 @@ export function ProjectWizard({
   const [selectedTemplate, setSelectedTemplate] = useState<ProjectTemplate | null>(null);
   const [productName, setProductName] = useState("");
   const [productDescription, setProductDescription] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [tone, setTone] = useState("");
+  const [creativity, setCreativity] = useState<"conservative" | "balanced" | "creative" | "experimental">("balanced");
   const [scenes, setScenes] = useState<SceneDraft[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -53,6 +63,13 @@ export function ProjectWizard({
       durationInFrames: s.durationInFrames,
       background: s.background,
       accent: s.accent,
+      fontFamily: "Inter",
+      fontSize: 40,
+      fontWeight: "bold",
+      fontStyle: "normal",
+      textColor: "#f7f7f2",
+      textTransition: "fade" as const,
+      devicePreset: "iphone-6.7",
     })));
     setStep("review");
   };
@@ -63,7 +80,13 @@ export function ProjectWizard({
     try {
       const project = await api.createProject("Untitled project");
       await api.saveProject({ ...project, productName, productDescription });
-      const result = await api.generate({ projectId: project.id, operation: "storyboard" });
+      const result = await api.generate({
+        projectId: project.id,
+        operation: "storyboard",
+        ...(industry ? { industry } : {}),
+        ...(tone ? { tone } : {}),
+        creativity,
+      });
       setScenes(result.scenes.map((s) => ({
         name: s.name,
         caption: s.caption,
@@ -71,8 +94,15 @@ export function ProjectWizard({
         layout: s.layout,
         transition: s.transition,
         durationInFrames: Math.round(s.durationSeconds * fps),
-        background: "#171714",
-        accent: "#e6ff5c",
+        background: s.background,
+        accent: s.accent,
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize,
+        fontWeight: s.fontWeight,
+        fontStyle: s.fontStyle,
+        textColor: s.textColor,
+        textTransition: s.textTransition,
+        devicePreset: s.devicePreset,
       })));
       setStep("review");
     } catch {
@@ -97,6 +127,22 @@ export function ProjectWizard({
         layout: s.layout,
         background: s.background,
         accent: s.accent,
+        textColor: s.textColor,
+        fontFamily: s.fontFamily,
+        fontSize: s.fontSize,
+        fontWeight: s.fontWeight,
+        fontStyle: s.fontStyle,
+        textTransition: s.textTransition,
+        devicePreset: s.devicePreset,
+        showLogo: false,
+        logoAssetId: null,
+        logoWidth: 120,
+        logoHeight: 120,
+        logoRadius: 20,
+        mediaFit: "cover",
+        mediaX: 50,
+        mediaY: 50,
+        voiceId: null,
         copy: {
           [locale]: {
             caption: s.caption,
@@ -152,6 +198,12 @@ export function ProjectWizard({
             productDescription={productDescription}
             onChangeName={setProductName}
             onChangeDescription={setProductDescription}
+            industry={industry}
+            tone={tone}
+            creativity={creativity}
+            onChangeIndustry={setIndustry}
+            onChangeTone={setTone}
+            onChangeCreativity={(v) => setCreativity(v as typeof creativity)}
             onBack={() => setStep("pick-method")}
             onGenerate={startAiGeneration}
           />
@@ -240,10 +292,14 @@ function TemplatePickStep({
 
 function DescribeStep({
   productName, productDescription, onChangeName, onChangeDescription,
+  industry, tone, creativity, onChangeIndustry, onChangeTone, onChangeCreativity,
   onBack, onGenerate,
 }: {
   productName: string; productDescription: string;
   onChangeName: (v: string) => void; onChangeDescription: (v: string) => void;
+  industry: string; tone: string; creativity: string;
+  onChangeIndustry: (v: string) => void; onChangeTone: (v: string) => void;
+  onChangeCreativity: (v: string) => void;
   onBack: () => void; onGenerate: () => void;
 }) {
   const valid = productName.trim().length > 0 && productDescription.trim().length > 0;
@@ -260,6 +316,44 @@ function DescribeStep({
         <span>Describe your app</span>
         <textarea rows={5} value={productDescription} onChange={(e) => onChangeDescription(e.target.value)} placeholder="What does your app do? Who is it for? What are the key features? What problem does it solve?" />
       </label>
+      <div className="wizard-row">
+        <label className="field">
+          <span>Industry</span>
+          <select value={industry} onChange={(e) => onChangeIndustry(e.target.value)}>
+            <option value="">General / Uncategorized</option>
+            <option value="SaaS / B2B">SaaS / B2B</option>
+            <option value="Consumer / Social">Consumer / Social</option>
+            <option value="Health & Wellness">Health & Wellness</option>
+            <option value="Finance & Fintech">Finance & Fintech</option>
+            <option value="Gaming & Entertainment">Gaming & Entertainment</option>
+            <option value="Education & E-Learning">Education & E-Learning</option>
+            <option value="Productivity & Tools">Productivity & Tools</option>
+            <option value="E-Commerce & Retail">E-Commerce & Retail</option>
+            <option value="Creative & Design">Creative & Design</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Tone / Mood</span>
+          <select value={tone} onChange={(e) => onChangeTone(e.target.value)}>
+            <option value="">Default</option>
+            <option value="Professional & Corporate">Professional & Corporate</option>
+            <option value="Energetic & Bold">Energetic & Bold</option>
+            <option value="Minimal & Sleek">Minimal & Sleek</option>
+            <option value="Playful & Friendly">Playful & Friendly</option>
+            <option value="Luxury & Premium">Luxury & Premium</option>
+            <option value="Educational & Informative">Educational & Informative</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Creativity</span>
+          <select value={creativity} onChange={(e) => onChangeCreativity(e.target.value as typeof creativity)}>
+            <option value="conservative">Conservative — proven patterns</option>
+            <option value="balanced">Balanced — moderate creativity</option>
+            <option value="creative">Creative — novel suggestions</option>
+            <option value="experimental">Experimental — unexpected combos</option>
+          </select>
+        </label>
+      </div>
       <div className="modal-actions">
         <button className="quiet-button" onClick={onBack}>Back</button>
         <button className="primary-button" disabled={!valid} onClick={onGenerate}>
@@ -296,6 +390,9 @@ function ReviewStep({
             </div>
             <div className="wizard-scene-swatch" style={{ background: scene.background }}>
               <span style={{ color: scene.accent }}><Sparkles size={14} /></span>
+              <span className="wizard-scene-font" style={{ fontSize: 10, color: scene.accent }}>
+                {scene.fontFamily} &middot; {scene.textTransition}
+              </span>
             </div>
           </div>
         ))}

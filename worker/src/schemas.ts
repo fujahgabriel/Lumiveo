@@ -55,6 +55,8 @@ export const sceneSchema = z.object({
   devicePreset: z.string().default("iphone-6.7"),
   voiceId: z.string().nullable().default(null),
   textTransition: z.enum(["fade", "typewriter", "slide", "bounce", "breathe"]).default("fade"),
+  textTransitionDuration: z.number().int().min(5).max(120).default(24),
+  textTransitionDirection: z.enum(["from-bottom", "from-top", "from-left", "from-right"]).default("from-bottom"),
 });
 
 export const generationRecordSchema = z.object({
@@ -131,7 +133,36 @@ export const generationRequestSchema = z.object({
   locale: z.string().min(2).max(35).optional(),
   regenerateSceneIds: z.array(z.string().uuid()).default([]),
   fields: z.array(z.enum(["caption", "narration", "name", "layout"])).optional(),
+  industry: z.string().optional(),
+  tone: z.string().optional(),
+  creativity: z.enum(["conservative", "balanced", "creative", "experimental"]).optional(),
 });
+
+export const availableFontFamilies = [
+  "Bricolage Grotesque",
+  "Fira Code",
+  "Inter",
+  "JetBrains Mono",
+  "Lora",
+  "Merriweather",
+  "Montserrat",
+  "Playfair Display",
+  "Poppins",
+  "Roboto",
+  "Space Grotesque",
+  "Syne",
+] as const;
+
+export const availableDevicePresets = [
+  "iphone-6.9",
+  "iphone-6.7",
+  "iphone-6.1",
+  "ipad-13",
+  "ipad-12.9",
+  "ipad-11",
+  "google-phone",
+  "google-tablet",
+] as const;
 
 export const sceneRegenerationSchema = z.object({
   projectId: z.string().uuid(),

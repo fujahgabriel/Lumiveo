@@ -1322,6 +1322,17 @@ button:disabled {
   cursor: pointer;
 }
 
+.wizard-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wizard-row .field {
+  flex: 1;
+  min-width: 0;
+}
+
 .wizard-generating {
   display: flex;
   flex-direction: column;
@@ -1514,6 +1525,15 @@ button:disabled {
   place-items: center;
   border-radius: var(--radius-s);
   flex: none;
+  position: relative;
+}
+
+.wizard-scene-font {
+  position: absolute;
+  bottom: -18px;
+  right: 0;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .onboarding-card {

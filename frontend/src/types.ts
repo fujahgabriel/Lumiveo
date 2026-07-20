@@ -55,6 +55,8 @@ export interface Scene {
   devicePreset?: string;
   voiceId?: string | null;
   textTransition?: "fade" | "typewriter" | "slide" | "bounce" | "breathe";
+  textTransitionDuration?: number;
+  textTransitionDirection?: "from-bottom" | "from-top" | "from-left" | "from-right";
 }
 
 export interface Project {
@@ -145,8 +147,19 @@ export interface StoryboardProposal {
     caption: string;
     narration: string;
     durationSeconds: number;
-  layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
+    layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
     transition: "none" | "fade" | "slide" | "scale";
+    background: string;
+    accent: string;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: string;
+    fontStyle: string;
+    textColor: string;
+    textTransition: "fade" | "typewriter" | "slide" | "bounce" | "breathe";
+    textTransitionDuration: number;
+    textTransitionDirection: "from-bottom" | "from-top" | "from-left" | "from-right";
+    devicePreset: string;
   }>;
 }
 

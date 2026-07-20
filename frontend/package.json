@@ -14,6 +14,7 @@
     "@remotion/gif": "4.0.491",
     "@remotion/google-fonts": "^4.0.494",
     "@remotion/player": "4.0.491",
+    "@remotion/transitions": "^4.0.491",
     "lucide-react": "^0.468.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",

@@ -1171,16 +1171,37 @@ export default function App() {
                   Italic (I)
                 </button>
               </div>
-              <label className="field">
+              <div className="field">
                 <span>Animation</span>
                 <select value={selectedScene.textTransition ?? "fade"} onChange={(event) => updateScene((scene) => ({ ...scene, textTransition: event.target.value as any }))}>
                   <option value="fade">Smooth Fade</option>
                   <option value="typewriter">Typewriter</option>
-                  <option value="slide">Slide Up (Rise)</option>
+                  <option value="slide">Slide In</option>
                   <option value="bounce">Bounce Zoom</option>
                   <option value="breathe">Slow Breathe</option>
                 </select>
-              </label>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="field">
+                <span>Speed</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input type="range" min={5} max={90} value={selectedScene.textTransitionDuration ?? 24} onChange={(event) => updateScene((scene) => ({ ...scene, textTransitionDuration: Number(event.target.value) }))} />
+                  <small>{((selectedScene.textTransitionDuration ?? 24) / 30).toFixed(1)}s</small>
+                </div>
+              </div>
+              {selectedScene.textTransition === "slide" ? (
+                <div className="field">
+                  <span>Direction</span>
+                  <div className="transition-grid">
+                    {(["from-bottom", "from-left", "from-right", "from-top"] as const).map((item) => (
+                      <button key={item} className={(selectedScene.textTransitionDirection ?? "from-bottom") === item ? "active" : ""} onClick={() => updateScene((scene) => ({ ...scene, textTransitionDirection: item }))}>
+                        {item.replace("from-", "")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

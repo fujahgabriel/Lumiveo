@@ -7,6 +7,7 @@ import type { AppDatabase } from "./db.js";
 import type { ProjectStore } from "./project-store.js";
 import type { SecretStore } from "./secrets.js";
 import type { GenerationRequest, Project } from "./schemas.js";
+import { availableFontFamilies, availableDevicePresets } from "./schemas.js";
 
 const proposedSceneSchema = z.object({
   sourceSceneId: z.string().nullable(),
@@ -17,6 +18,17 @@ const proposedSceneSchema = z.object({
   durationSeconds: z.number().min(1).max(60),
   layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]),
   transition: z.enum(["none", "fade", "slide", "scale"]),
+  background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  fontFamily: z.string().default("Inter"),
+  fontSize: z.number().int().min(12).max(120).default(40),
+  fontWeight: z.string().default("bold"),
+  fontStyle: z.string().default("normal"),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#f7f7f2"),
+  textTransition: z.enum(["fade", "typewriter", "slide", "bounce", "breathe"]).default("fade"),
+  textTransitionDuration: z.number().int().min(5).max(120).default(24),
+  textTransitionDirection: z.enum(["from-bottom", "from-top", "from-left", "from-right"]).default("from-bottom"),
+  devicePreset: z.string().default("iphone-6.7"),
 });
 
 const storyboardSchema = z.object({
@@ -161,8 +173,8 @@ export class AiService {
         durationInFrames: Math.round(scene.durationSeconds * project.fps),
         transition: scene.transition,
         layout: scene.layout,
-        background: project.scenes[index]?.background ?? "#171714",
-        accent: project.scenes[index]?.accent ?? "#e6ff5c",
+        background: scene.background,
+        accent: scene.accent,
         copy: {
           [locale]: {
             caption: scene.caption,
@@ -176,17 +188,19 @@ export class AiService {
         logoWidth: 120,
         logoHeight: 120,
         logoRadius: 20,
-        textColor: project.scenes[index]?.textColor ?? "#f7f7f2",
-        fontFamily: project.scenes[index]?.fontFamily ?? "Inter",
-        fontSize: project.scenes[index]?.fontSize ?? 40,
-        fontWeight: project.scenes[index]?.fontWeight ?? "bold",
-        fontStyle: project.scenes[index]?.fontStyle ?? "normal",
+        textColor: scene.textColor,
+        fontFamily: scene.fontFamily,
+        fontSize: scene.fontSize,
+        fontWeight: scene.fontWeight,
+        fontStyle: scene.fontStyle,
         mediaFit: project.scenes[index]?.mediaFit ?? "cover",
         mediaX: project.scenes[index]?.mediaX ?? 50,
         mediaY: project.scenes[index]?.mediaY ?? 50,
-        devicePreset: project.scenes[index]?.devicePreset ?? "iphone-6.7",
+        devicePreset: scene.devicePreset,
         voiceId: project.scenes[index]?.voiceId ?? null,
-        textTransition: project.scenes[index]?.textTransition ?? "fade",
+        textTransition: scene.textTransition,
+        textTransitionDuration: scene.textTransitionDuration,
+        textTransitionDirection: scene.textTransitionDirection,
       }));
     }
     const locales = project.locales.some((entry) => entry.code === locale)
@@ -258,6 +272,17 @@ class LocalProvider implements AiProvider {
           durationSeconds: scene.durationInFrames / project.fps,
           layout: scene.layout,
           transition: scene.transition,
+          background: scene.background,
+          accent: scene.accent,
+          fontFamily: scene.fontFamily,
+          fontSize: scene.fontSize,
+          fontWeight: scene.fontWeight,
+          fontStyle: scene.fontStyle,
+          textColor: scene.textColor,
+          textTransition: scene.textTransition,
+          textTransitionDuration: scene.textTransitionDuration ?? 24,
+          textTransitionDirection: scene.textTransitionDirection ?? "from-bottom",
+          devicePreset: scene.devicePreset,
         })),
       };
     }
@@ -280,6 +305,17 @@ class LocalProvider implements AiProvider {
         durationSeconds: 3,
         layout: "device" as const,
         transition: "fade" as const,
+        background: "#171714",
+        accent: "#e6ff5c",
+        fontFamily: "Inter",
+        fontSize: 40,
+        fontWeight: "bold",
+        fontStyle: "normal",
+        textColor: "#f7f7f2",
+        textTransition: "fade" as const,
+        textTransitionDuration: 24,
+        textTransitionDirection: "from-bottom" as const,
+        devicePreset: "iphone-6.7",
       })),
     };
   }
@@ -472,20 +508,34 @@ const jsonShape = {
       caption: "string",
       narration: "string",
       durationSeconds: "number 1-60",
-      layout: "device|full|split",
+      layout: "device|full|split|minimal|gradient|highlight",
       transition: "none|fade|slide|scale",
+      background: "#hex color",
+      accent: "#hex accent color",
+      fontFamily: "Inter, Poppins, Roboto, etc.",
+      fontSize: "number 12-120",
+      fontWeight: "normal|bold|100-900",
+      fontStyle: "normal|italic",
+      textColor: "#hex text color",
+      textTransition: "fade|typewriter|slide|bounce|breathe",
+      textTransitionDuration: "number 5-120 default 24",
+      textTransitionDirection: "from-bottom|from-top|from-left|from-right",
+      devicePreset: "iphone-6.7|iphone-6.9|iphone-6.1|ipad-13|ipad-12.9|ipad-11|google-phone|google-tablet",
     },
   ],
 };
 
 function promptFor(project: Project, request: GenerationRequest) {
   const locale = request.locale ?? project.sourceLocale;
-  return [
+  const lines = [
     `Operation: ${request.operation}`,
     `Target locale: ${locale}`,
     `Product: ${project.productName || project.title}`,
     `Description: ${project.productDescription || "Not provided"}`,
-    `Assets: ${JSON.stringify(project.assets.map(({ id, name, mediaType }) => ({ id, name, mediaType })))}`,
+    ...(request.industry ? [`Industry: ${request.industry}`] : []),
+    ...(request.tone ? [`Tone / mood: ${request.tone}`] : []),
+    ...(request.creativity ? [`Creativity level: ${request.creativity}`] : []),
+    `Assets: ${JSON.stringify(project.assets.filter((a) => a.mediaType !== "audio").map(({ id, name, mediaType }) => ({ id, name, mediaType })))}`,
     `Current scenes: ${JSON.stringify(
       project.scenes.map((scene) => ({
         id: scene.id,
@@ -495,7 +545,16 @@ function promptFor(project: Project, request: GenerationRequest) {
       })),
     )}`,
     "Keep claims grounded in supplied content. Preserve every supplied asset ID exactly or use null.",
-  ].join("\n");
+  ];
+  if (request.operation === "storyboard") {
+    lines.push(`Available font families: ${availableFontFamilies.join(", ")}`);
+    lines.push(`Available device presets: ${availableDevicePresets.join(", ")}`);
+    lines.push(
+      "For each scene suggest background, accent, fontFamily, fontSize, fontWeight, fontStyle, textColor, textTransition, textTransitionDuration, textTransitionDirection, and devicePreset that match the industry, tone, and creativity level.",
+    );
+    lines.push("Choose fontFamily from the available list. Keep typography consistent across scenes.");
+  }
+  return lines.join("\n");
 }
 
 function extractText(kind: "openai" | "anthropic" | "google", payload: Record<string, unknown>) {

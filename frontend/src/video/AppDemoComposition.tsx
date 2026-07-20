@@ -4,20 +4,32 @@ import {
   Audio,
   Img,
   OffthreadVideo,
-  Sequence,
   interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import {
+  TransitionSeries,
+  linearTiming,
+} from "@remotion/transitions";
+import { fade } from "@remotion/transitions/fade";
+import { slide } from "@remotion/transitions/slide";
+import { flip } from "@remotion/transitions/flip";
 import type { Asset, Scene, VideoProps } from "../types";
 import { durationFor, presetDimensions } from "./config";
 
+const TRANSITION_FRAMES = 12;
+
+function presentationFor(transition: string) {
+  if (transition === "slide") return slide({ direction: "from-left" });
+  if (transition === "scale") return flip();
+  return fade();
+}
 
 export function AppDemoComposition(props: VideoProps) {
-  let start = 0;
   const totalDuration = durationFor(props.project);
-  
+
   const bgAudioUrl = props.project.backgroundAudioId
     ? `${props.assetBaseUrl.replace(/\/$/, "")}/${props.project.backgroundAudioId}?token=${encodeURIComponent(props.workerToken || "")}`
     : props.project.backgroundAudioUrl
@@ -36,34 +48,48 @@ export function AppDemoComposition(props: VideoProps) {
           totalDurationInFrames={totalDuration}
         />
       )}
-      {props.project.scenes.map((scene, index) => {
-        const from = start;
-        start += scene.durationInFrames;
-        const asset = props.project.assets.find((entry) => entry.id === scene.assetId);
-        
-        // Find if this scene has any audio assets associated with it to play as voiceover/soundtrack
-        const sceneAudioAssets = props.project.assets.filter((a: Asset) => a.mediaType === "audio" && (a.name === `voiceover-${scene.id}.mp3` || a.name.includes(scene.id)));
-        const activeAudio = sceneAudioAssets[sceneAudioAssets.length - 1]; // Use the most recently generated voiceover for this scene
-        const audioUrl = activeAudio
-          ? `${props.assetBaseUrl.replace(/\/$/, "")}/${activeAudio.id}?token=${encodeURIComponent(props.workerToken)}`
-          : null;
+      <TransitionSeries>
+        {props.project.scenes.flatMap((scene, index) => {
+          const asset = props.project.assets.find((entry) => entry.id === scene.assetId);
 
-        return (
-          <Sequence key={scene.id} from={from} durationInFrames={scene.durationInFrames}>
-            {audioUrl && <Audio src={audioUrl} />}
-            <DemoScene
-              scene={scene}
-              asset={asset}
-              projectId={props.project.id}
-              locale={props.locale}
-              preset={props.preset}
-              assetBaseUrl={props.assetBaseUrl}
-              token={props.workerToken}
-              isLast={index === props.project.scenes.length - 1}
-            />
-          </Sequence>
-        );
-      })}
+          const sceneAudioAssets = props.project.assets.filter((a: Asset) => a.mediaType === "audio" && (a.name === `voiceover-${scene.id}.mp3` || a.name.includes(scene.id)));
+          const activeAudio = sceneAudioAssets[sceneAudioAssets.length - 1];
+          const audioUrl = activeAudio
+            ? `${props.assetBaseUrl.replace(/\/$/, "")}/${activeAudio.id}?token=${encodeURIComponent(props.workerToken)}`
+            : null;
+
+          const elements: React.ReactNode[] = [
+            <TransitionSeries.Sequence
+              key={scene.id}
+              durationInFrames={scene.durationInFrames}
+              name={scene.name}
+            >
+              <DemoScene
+                scene={scene}
+                asset={asset}
+                backgroundAudioUrl={audioUrl}
+                projectId={props.project.id}
+                locale={props.locale}
+                preset={props.preset}
+                assetBaseUrl={props.assetBaseUrl}
+                token={props.workerToken}
+              />
+            </TransitionSeries.Sequence>,
+          ];
+
+          if (index < props.project.scenes.length - 1 && scene.transition !== "none") {
+            elements.push(
+              <TransitionSeries.Transition
+                key={`t-${scene.id}`}
+                presentation={presentationFor(scene.transition)}
+                timing={linearTiming({ durationInFrames: TRANSITION_FRAMES })}
+              />,
+            );
+          }
+
+          return elements;
+        })}
+      </TransitionSeries>
     </AbsoluteFill>
   );
 }
@@ -71,32 +97,26 @@ export function AppDemoComposition(props: VideoProps) {
 function DemoScene({
   scene,
   asset,
+  backgroundAudioUrl,
   projectId,
   locale,
   preset,
   assetBaseUrl,
   token,
-  isLast,
 }: {
   scene: Scene;
   asset?: Asset;
+  backgroundAudioUrl: string | null;
   projectId: string;
   locale: string;
   preset: VideoProps["preset"];
   assetBaseUrl: string;
   token: string;
-  isLast: boolean;
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const copy = scene.copy[locale] ?? scene.copy[Object.keys(scene.copy)[0]];
   const entrance = spring({ frame, fps, config: { damping: 18, stiffness: 120, mass: 0.8 } });
-  const exit = isLast
-    ? 1
-    : interpolate(frame, [scene.durationInFrames - 12, scene.durationInFrames], [1, 0], {
-        extrapolateLeft: "clamp",
-        extrapolateRight: "clamp",
-      });
   const direction = /^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr";
   const isLandscape = preset === "landscape";
   const mediaUrl = asset
@@ -107,36 +127,68 @@ function DemoScene({
     ? `${assetBaseUrl.replace(/\/$/, "")}/${scene.logoAssetId}?token=${encodeURIComponent(token)}`
     : null;
 
-  // Canva-style text transitions/animations
-  const charsToShow = Math.floor(
-    interpolate(frame, [0, Math.min(30, scene.durationInFrames)], [0, (copy?.caption ?? scene.name).length], {
-      extrapolateRight: "clamp",
-    })
+  const textT = scene.textTransition ?? "fade";
+  const textDur = Math.min(scene.textTransitionDuration ?? 24, scene.durationInFrames - 5);
+  const textDir = scene.textTransitionDirection ?? "from-bottom";
+  const textContainerOpacity = 1;
+  const textContainerY = 0;
+
+  const voiceoverVolume = interpolate(
+    frame,
+    [0, TRANSITION_FRAMES, scene.durationInFrames - TRANSITION_FRAMES, scene.durationInFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
   );
-  const renderedCaption = scene.textTransition === "typewriter"
-    ? (copy?.caption ?? scene.name).slice(0, charsToShow)
-    : (copy?.caption ?? scene.name);
 
-  const bounceScale = spring({ frame, fps, config: { damping: 11, stiffness: 130, mass: 0.5 } });
-  const baseScale = scene.textTransition === "bounce" ? bounceScale : 1;
-  const breatheScale = 1 + Math.sin(frame / 40) * 0.02;
-  const finalScale = scene.textTransition === "breathe" ? breatheScale : baseScale;
+  const fullText = copy?.caption ?? scene.name;
+  const lines = fullText.split("\n");
+  const lastLine = lines[lines.length - 1] ?? "";
+  const charsToShow = textT === "typewriter"
+    ? Math.floor(interpolate(frame, [0, textDur], [0, lastLine.length], { extrapolateRight: "clamp" }))
+    : lastLine.length;
+  const renderedCaption = textT === "typewriter"
+    ? [...lines.slice(0, -1), lastLine.slice(0, charsToShow)].join("\n")
+    : fullText;
 
-  const slideY = scene.textTransition === "slide" ? interpolate(entrance, [0, 1], [40, 0]) : 0;
-  const fadeOpacity = scene.textTransition === "fade" ? interpolate(entrance, [0, 1], [0, 1]) : 1;
+  const progress = interpolate(frame, [0, textDur], [0, 1], { extrapolateRight: "clamp" });
+  const dist = 60;
+
+  let tx = 0;
+  let ty = 0;
+  if (textT === "slide") {
+    switch (textDir) {
+      case "from-left": tx = dist * (1 - progress); break;
+      case "from-right": tx = -dist * (1 - progress); break;
+      case "from-top": ty = -dist * (1 - progress); break;
+      default: ty = dist * (1 - progress);
+    }
+  }
+
+  const bounceScale = textT === "bounce"
+    ? spring({ frame, fps, config: { damping: 11, stiffness: 130, mass: 0.5 } })
+    : 1;
+  const breatheScale = textT === "breathe"
+    ? 1 + Math.sin(frame * Math.PI * 2 / (fps * 2)) * 0.03
+    : 1;
+  const finalScale = textT === "bounce" ? bounceScale : textT === "breathe" ? breatheScale : 1;
+
+  const textOpacity = textT === "fade" ? progress : 1;
 
   return (
     <AbsoluteFill
       style={{
         backgroundColor: scene.background,
         color: scene.textColor ?? "#f7f7f2",
-        opacity: exit,
         overflow: "hidden",
         fontFamily: scene.fontFamily
           ? `"${scene.fontFamily}", Inter, "SF Pro Display", system-ui, sans-serif`
           : 'Inter, "SF Pro Display", "Noto Sans Arabic", "Noto Sans CJK SC", system-ui, sans-serif',
       }}
     >
+      {backgroundAudioUrl && (
+        <Audio src={backgroundAudioUrl} volume={voiceoverVolume} />
+      )}
+
       <div
         style={{
           position: "absolute",
@@ -179,8 +231,8 @@ function DemoScene({
           style={{
             width: isLandscape ? "42%" : "100%",
             textAlign: direction === "rtl" ? "right" : isLandscape ? "left" : "center",
-            opacity: interpolate(entrance, [0, 1], [0, 1]),
-            transform: `translateY(${(1 - entrance) * 44}px)`,
+            opacity: textContainerOpacity,
+            transform: `translateY(${textContainerY}px)`,
           }}
         >
           <div
@@ -221,8 +273,8 @@ function DemoScene({
               lineHeight: 1.04,
               letterSpacing: "-0.045em",
               textWrap: "balance",
-              transform: `scale(${finalScale}) translateY(${slideY}px)`,
-              opacity: fadeOpacity,
+              transform: `translate(${tx}px, ${ty}px) scale(${finalScale})`,
+              opacity: textOpacity,
               display: "inline-block",
             }}
           >

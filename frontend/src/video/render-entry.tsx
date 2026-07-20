@@ -1,5 +1,5 @@
 import { registerRoot } from "remotion";
 import { RemotionRoot } from "./RemotionRoot";
-import "./fonts.css";
+import "./fonts";
 
 registerRoot(RemotionRoot);

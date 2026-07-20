@@ -6,6 +6,13 @@ export const presetDimensions: Record<ExportPreset, { width: number; height: num
   square: { width: 1080, height: 1080 },
 };
 
+const TRANSITION_FRAMES = 12;
+
 export function durationFor(project: Pick<Project, "scenes">) {
-  return project.scenes.reduce((total, scene) => total + scene.durationInFrames, 0);
+  const total = project.scenes.reduce((sum, s) => sum + s.durationInFrames, 0);
+  const overlaps = project.scenes
+    .slice(0, -1)
+    .filter((s) => s.transition !== "none")
+    .length * TRANSITION_FRAMES;
+  return total - overlaps;
 }
