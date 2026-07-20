@@ -1,6 +1,6 @@
 import { Check, CircleAlert, Download, LoaderCircle } from "lucide-react";
 import { useState } from "react";
-import type { ExportFormat, ExportPreset, Project, RenderJob } from "../types";
+import type { ExportFormat, ExportPreset, ExportQuality, Project, RenderJob } from "../types";
 import { durationFor, presetDimensions } from "../video/config";
 import { ModalFrame } from "./ModalFrame";
 
@@ -14,14 +14,18 @@ export function ExportModal({
   project: Project;
   job: RenderJob | null;
   onClose: () => void;
-  onStart: (input: { preset: ExportPreset; format: ExportFormat; locale: string; scale?: number }) => Promise<void>;
+  onStart: (input: { preset: ExportPreset; format: ExportFormat; locale: string; scale?: number; crf?: number }) => Promise<void>;
   onCancel: () => void;
 }) {
   const [preset, setPreset] = useState<ExportPreset>("portrait");
   const [format, setFormat] = useState<ExportFormat>("mp4");
   const [locale, setLocale] = useState(project.activeLocale);
   const [scale, setScale] = useState(1.0);
+  const [quality, setQuality] = useState<ExportQuality>("normal");
   const active = Boolean(job && ["queued", "running"].includes(job.status));
+
+  const crfMap: Record<ExportQuality, number> = { draft: 28, normal: 20, high: 16 };
+  const qualityMap: Record<ExportQuality, string> = { draft: "Draft (smaller, faster)", normal: "Normal (balanced)", high: "High (best quality)" };
 
   return (
     <ModalFrame title="Export master" subtitle="Render locally on this Mac" onClose={onClose}>
@@ -90,7 +94,14 @@ export function ExportModal({
                 <option value={2.0}>4K (Ultra HD - 2.0x)</option>
               </select>
             </label>
-            <div className="field" style={{ visibility: "hidden" }} />
+            <label className="field">
+              <span>Quality</span>
+              <select value={quality} onChange={(event) => setQuality(event.target.value as ExportQuality)}>
+                {(Object.keys(qualityMap) as ExportQuality[]).map((key) => (
+                  <option key={key} value={key}>{qualityMap[key]} (CRF {crfMap[key]})</option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="export-summary">
             <span>Duration</span>
@@ -105,7 +116,7 @@ export function ExportModal({
           {active ? "Cancel render" : "Close"}
         </button>
         {!job ? (
-          <button className="primary-button" type="button" onClick={() => void onStart({ preset, format, locale, scale })}>
+            <button className="primary-button" type="button" onClick={() => void onStart({ preset, format, locale, scale, crf: format === "mp4" ? crfMap[quality] : undefined })}>
             <Download size={15} /> Start export
           </button>
         ) : null}

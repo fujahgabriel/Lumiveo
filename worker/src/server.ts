@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { copyFile, mkdir, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ZodError } from "zod";
 import { AiService, type StoryboardProposal } from "./ai.js";
 import { AnalyticsService } from "./analytics.js";
@@ -316,6 +316,17 @@ async function route(request: IncomingMessage, response: ServerResponse, url: UR
     json(response, 200, renders.cancel(renderMatch[1]));
     return;
   }
+  const renderSaveMatch = url.pathname.match(/^\/v1\/renders\/([0-9a-f-]+)\/save-as$/i);
+  if (renderSaveMatch && request.method === "POST") {
+    const job = renders.get(renderSaveMatch[1]);
+    if (!job || !job.output_path) throw new Error("render_output_not_available");
+    const { targetPath } = (await readJson(request)) as { targetPath: string };
+    await mkdir(dirname(targetPath), { recursive: true });
+    await copyFile(job.output_path, targetPath);
+    json(response, 200, { path: targetPath });
+    return;
+  }
+
   const projectRenders = url.pathname.match(/^\/v1\/projects\/([0-9a-f-]+)\/renders$/i);
   if (projectRenders && request.method === "GET") {
     json(response, 200, renders.list(projectRenders[1]));

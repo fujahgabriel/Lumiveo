@@ -197,8 +197,6 @@ export default function App() {
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
-  const [playingBgMusic, setPlayingBgMusic] = useState(false);
-  const bgMusicPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const togglePlayAudio = (assetId: string) => {
     if (playingAudioId === assetId) {
@@ -216,36 +214,9 @@ export default function App() {
     }
   };
 
-  const togglePlayBgMusic = () => {
-    if (playingBgMusic) {
-      bgMusicPlayerRef.current?.pause();
-      setPlayingBgMusic(false);
-    } else {
-      if (bgMusicPlayerRef.current) {
-        bgMusicPlayerRef.current.pause();
-      }
-      const rawUrl = project?.backgroundAudioId
-        ? assetUrl(project.id, project.backgroundAudioId)
-        : project?.backgroundAudioUrl || null;
-        
-      if (!rawUrl) return;
-      
-      const finalUrl = rawUrl.startsWith("http") && !rawUrl.includes("127.0.0.1")
-        ? `${workerUrl}/v1/system/proxy?url=${encodeURIComponent(rawUrl)}&token=${encodeURIComponent(workerToken)}`
-        : rawUrl;
-
-      bgMusicPlayerRef.current = new Audio(finalUrl);
-      bgMusicPlayerRef.current.volume = project?.backgroundAudioVolume ?? 0.15;
-      bgMusicPlayerRef.current.onended = () => setPlayingBgMusic(false);
-      void bgMusicPlayerRef.current.play();
-      setPlayingBgMusic(true);
-    }
-  };
-
   useEffect(() => {
     return () => {
       audioPlayerRef.current?.pause();
-      bgMusicPlayerRef.current?.pause();
     };
   }, [project?.id]);
 
@@ -531,6 +502,8 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [dirty, project]);
 
+  const renderSaved = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!renderJob || !["queued", "running"].includes(renderJob.status)) return;
     const timer = window.setInterval(async () => {
@@ -538,13 +511,32 @@ export default function App() {
       if (!next) return;
       if (next.status === "completed" && renderJob.status !== "completed") {
         notifyOS("Export Complete", `Your demo video is ready.`);
+        if (!renderSaved.current.has(next.id)) {
+          renderSaved.current.add(next.id);
+          const bridge = (window as any).zero;
+          const ext = next.output_path?.endsWith(".gif") ? "gif" : next.output_path?.endsWith(".png") ? "png" : "mp4";
+          const defaultName = project ? `${project.title.replace(/[\/\\?%*:|"<>\s]/g, "-")}.${ext}` : `demo.${ext}`;
+          const targetPath = await bridge?.invoke("native-sdk.dialog.saveFile", {
+            title: "Save rendered video",
+            defaultName,
+          }).catch(() => null) as string | null;
+          if (targetPath) {
+            try {
+              await api.saveRenderAs(next.id, targetPath);
+              showNotice("Video saved successfully!");
+              void api.revealPath(targetPath);
+            } catch {
+              showNotice("Failed to save video to the selected location.");
+            }
+          }
+        }
       } else if (next.status === "failed" && renderJob.status !== "failed") {
         notifyOS("Export Failed", next.error_code ?? "An error occurred during rendering.");
       }
       setRenderJob(next);
     }, 800);
     return () => window.clearInterval(timer);
-  }, [renderJob, settings.notificationsEnabled]);
+  }, [renderJob, project, settings.notificationsEnabled]);
 
   const updateProject = (updater: (current: Project) => Project) => {
     setProject((current) => (current ? updater(current) : current));
@@ -648,7 +640,7 @@ export default function App() {
     }
   };
 
-  const startRender = async (input: { preset: ExportPreset; format: ExportFormat; locale: string }) => {
+  const startRender = async (input: { preset: ExportPreset; format: ExportFormat; locale: string; scale?: number; crf?: number }) => {
     if (!project) return;
     try {
       const job = await api.startRender({ projectId: project.id, ...input });
@@ -1221,116 +1213,6 @@ export default function App() {
           </div>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          <h4 style={{ margin: "0 0 4px", fontSize: "11px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-3)" }}>Soundtrack</h4>
-          
-          <div className="field" style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div className="field-label-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>Background Music</span>
-              {(project.backgroundAudioUrl || project.backgroundAudioId) && (
-                <button
-                  type="button"
-                  className="quiet-button"
-                  onClick={togglePlayBgMusic}
-                  style={{
-                    fontSize: "11px",
-                    padding: "2px 8px",
-                    background: playingBgMusic ? "var(--accent)" : "var(--bg-hover)",
-                    color: playingBgMusic ? "#000" : "var(--text-1)",
-                    borderRadius: "12px",
-                    fontWeight: "bold",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  {playingBgMusic ? "Pause Preview" : "Play Preview"}
-                </button>
-              )}
-            </div>
-            <select
-              value={project.backgroundAudioUrl || project.backgroundAudioId || ""}
-              onChange={(event) => {
-                const val = event.target.value;
-                if (bgMusicPlayerRef.current) {
-                  bgMusicPlayerRef.current.pause();
-                  setPlayingBgMusic(false);
-                }
-                if (!val) {
-                  updateProject((current) => ({ ...current, backgroundAudioUrl: null, backgroundAudioId: null }));
-                } else if (val.startsWith("http")) {
-                  updateProject((current) => ({ ...current, backgroundAudioUrl: val, backgroundAudioId: null }));
-                } else {
-                  updateProject((current) => ({ ...current, backgroundAudioUrl: null, backgroundAudioId: val }));
-                }
-              }}
-            >
-              <option value="">-- No Background Music --</option>
-              <optgroup label="Free Non-Commercial Tracks">
-                <option value="https://assets.mixkit.co/music/preview/mixkit-tech-house-vibes-130.mp3">Inspiring Tech (Ambient)</option>
-                <option value="https://assets.mixkit.co/music/preview/mixkit-corporate-culture-1351.mp3">Vibrant Corporate (Acoustic)</option>
-                <option value="https://assets.mixkit.co/music/preview/mixkit-dreaming-big-31.mp3">Dreamy Ambient (Atmospheric)</option>
-                <option value="https://assets.mixkit.co/music/preview/mixkit-sun-and-fun-12.mp3">Playful & Light (Upbeat)</option>
-              </optgroup>
-              {project.assets.filter(a => a.mediaType === "audio" && !a.name.startsWith("voiceover-")).length > 0 && (
-                <optgroup label="Uploaded Custom Music">
-                  {project.assets.filter(a => a.mediaType === "audio" && !a.name.startsWith("voiceover-")).map((asset) => (
-                    <option key={asset.id} value={asset.id}>{asset.name}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
-
-          {(project.backgroundAudioUrl || project.backgroundAudioId) && (
-            <>
-              <div className="field-grid">
-                <label className="field">
-                  <span>Music Volume ({Math.round((project.backgroundAudioVolume ?? 0.15) * 100)}%)</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={project.backgroundAudioVolume ?? 0.15}
-                    onChange={(event) => {
-                      const val = Number(event.target.value);
-                      updateProject((current) => ({ ...current, backgroundAudioVolume: val }));
-                      if (bgMusicPlayerRef.current) {
-                        bgMusicPlayerRef.current.volume = val;
-                      }
-                    }}
-                  />
-                </label>
-                <div className="field" style={{ visibility: "hidden" }} />
-              </div>
-              <div className="field-grid">
-                <label className="field">
-                  <span>Fade In (sec)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    value={project.backgroundAudioFadeIn ?? 1}
-                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioFadeIn: Number(event.target.value) }))}
-                  />
-                </label>
-                <label className="field">
-                  <span>Fade Out (sec)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={10}
-                    step={0.5}
-                    value={project.backgroundAudioFadeOut ?? 1}
-                    onChange={(event) => updateProject((current) => ({ ...current, backgroundAudioFadeOut: Number(event.target.value) }))}
-                  />
-                </label>
-              </div>
-            </>
-          )}
-        </div>
-        
         <div style={{ borderTop: "1px solid var(--line)", marginTop: "16px", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", userSelect: "none" }}>
               <input type="checkbox" checked={selectedScene.showLogo ?? false} onChange={(event) => updateScene((scene) => ({ ...scene, showLogo: event.target.checked }))} />

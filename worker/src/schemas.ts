@@ -122,6 +122,7 @@ export const renderRequestSchema = z.object({
   preset: z.enum(["portrait", "landscape", "square"]),
   format: z.enum(["mp4", "gif", "png-sequence"]),
   scale: z.number().min(0.1).max(10).default(1),
+  crf: z.number().int().min(0).max(51).optional(),
 });
 
 export const generationRequestSchema = z.object({

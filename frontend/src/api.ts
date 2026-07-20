@@ -201,9 +201,12 @@ export const api = {
     preset: ExportPreset;
     format: ExportFormat;
     scale?: number;
+    crf?: number;
   }) => request<RenderJob>("/v1/renders", { method: "POST", body: JSON.stringify(input) }),
   render: (id: string) => request<RenderJob>(`/v1/renders/${id}`),
   cancelRender: (id: string) => request<RenderJob>(`/v1/renders/${id}`, { method: "DELETE" }),
+  saveRenderAs: (id: string, targetPath: string) =>
+    request<{ path: string }>(`/v1/renders/${id}/save-as`, { method: "POST", body: JSON.stringify({ targetPath }) }),
   getCacheSize: () =>
     request<{ sizeString: string; bytes: number; dataDir: string; projectRoot: string; outputRoot: string }>("/v1/cache-size"),
   track: (name: string, properties?: Record<string, unknown>) =>

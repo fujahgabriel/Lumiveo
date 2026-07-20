@@ -1,8 +1,10 @@
 import { mkdir } from "node:fs/promises";
+import { cpus } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bundle } from "@remotion/bundler";
 import {
+  ensureBrowser,
   makeCancelSignal,
   renderFrames,
   renderMedia,
@@ -113,6 +115,7 @@ export class RenderService {
     };
 
     try {
+      await ensureBrowser();
       this.update(id, "running", 0.01);
       const project = await this.projects.get(request.projectId);
       if (!project) throw new Error("project_not_found");
@@ -132,6 +135,8 @@ export class RenderService {
       await mkdir(config.outputRoot, { recursive: true });
       const baseName = safeName(`${project.title}-${request.locale}-${request.preset}`);
 
+      const concurrency = Math.min(cpus().length, 4);
+
       if (request.format === "png-sequence") {
         const outputDir = join(config.outputRoot, `${baseName}-${id}`);
         await mkdir(outputDir, { recursive: true });
@@ -143,6 +148,8 @@ export class RenderService {
           imageFormat: "png",
           cancelSignal,
           scale: request.scale ?? 1,
+          concurrency,
+          chromiumOptions: { gl: "angle" },
           onStart: () => undefined,
           onFrameUpdate: (framesRendered) =>
             syncProgress(framesRendered / composition.durationInFrames),
@@ -153,16 +160,30 @@ export class RenderService {
 
       const extension = request.format === "gif" ? "gif" : "mp4";
       const output = join(config.outputRoot, `${baseName}-${id}.${extension}`);
+      const isVideo = request.format === "mp4";
       await renderMedia({
         serveUrl,
         composition,
         inputProps,
         outputLocation: output,
-        codec: request.format === "gif" ? "gif" : "h264",
+        codec: isVideo ? "h264" : "gif",
         overwrite: true,
         cancelSignal,
         scale: request.scale ?? 1,
-        chromiumOptions: { enableMultiProcessOnLinux: true },
+        concurrency,
+        chromiumOptions: { gl: "angle" },
+        ...(isVideo && request.crf ? { crf: request.crf } : {}),
+        ...(isVideo ? { pixelFormat: "yuv444p" } : {}),
+        enforceAudioTrack: true,
+        timeoutInMilliseconds: 600_000,
+        onBrowserDownload: () => ({
+          onProgress: (progress) => {
+            if (!progress.alreadyAvailable) {
+              console.log(`[Render] Downloading browser: ${Math.round(progress.percent * 100)}%`);
+            }
+          },
+          version: null,
+        }),
         onProgress: ({ progress: p }) => syncProgress(p),
       });
       this.complete(id, output);
@@ -186,7 +207,15 @@ export class RenderService {
     this.bundlePromise ??= bundle({
       entryPoint: renderEntry,
       onProgress: () => undefined,
-      webpackOverride: (configuration) => configuration,
+      webpackOverride: (config) => ({
+        ...config,
+        optimization: {
+          ...config.optimization,
+          minimize: true,
+          usedExports: true,
+          sideEffects: true,
+        },
+      }),
     }).catch((error) => {
       this.bundlePromise = null;
       throw error;

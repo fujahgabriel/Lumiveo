@@ -1,6 +1,7 @@
 export type MediaType = "image" | "video" | "audio" | "gif";
 export type ExportPreset = "portrait" | "landscape" | "square";
 export type ExportFormat = "mp4" | "gif" | "png-sequence";
+export type ExportQuality = "draft" | "normal" | "high";
 
 export interface LocaleTrack {
   code: string;
