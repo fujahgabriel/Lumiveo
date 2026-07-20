@@ -128,7 +128,8 @@ function DemoScene({
     : null;
 
   const textT = scene.textTransition ?? "fade";
-  const textDur = Math.min(scene.textTransitionDuration ?? 24, scene.durationInFrames - 5);
+  const speedVal = scene.textTransitionDuration ?? 71;
+  const textDur = Math.max(3, Math.min(95 - speedVal, scene.durationInFrames - 5));
   const textDir = scene.textTransitionDirection ?? "from-bottom";
   const textContainerOpacity = 1;
   const textContainerY = 0;

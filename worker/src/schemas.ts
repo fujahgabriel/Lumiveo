@@ -55,7 +55,7 @@ export const sceneSchema = z.object({
   devicePreset: z.string().default("iphone-6.7"),
   voiceId: z.string().nullable().default(null),
   textTransition: z.enum(["fade", "typewriter", "slide", "bounce", "breathe"]).default("fade"),
-  textTransitionDuration: z.number().int().min(5).max(120).default(24),
+  textTransitionDuration: z.number().int().min(5).max(95).default(71),
   textTransitionDirection: z.enum(["from-bottom", "from-top", "from-left", "from-right"]).default("from-bottom"),
 });
 

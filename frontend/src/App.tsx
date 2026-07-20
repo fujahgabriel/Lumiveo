@@ -1186,8 +1186,8 @@ export default function App() {
               <div className="field">
                 <span>Speed</span>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <input type="range" min={5} max={90} value={selectedScene.textTransitionDuration ?? 24} onChange={(event) => updateScene((scene) => ({ ...scene, textTransitionDuration: Number(event.target.value) }))} />
-                  <small>{((selectedScene.textTransitionDuration ?? 24) / 30).toFixed(1)}s</small>
+                  <input type="range" min={5} max={95} value={selectedScene.textTransitionDuration ?? 71} onChange={(event) => updateScene((scene) => ({ ...scene, textTransitionDuration: Number(event.target.value) }))} />
+                  <small>{(Math.max(3, 95 - (selectedScene.textTransitionDuration ?? 71)) / 30).toFixed(1)}s</small>
                 </div>
               </div>
               {selectedScene.textTransition === "slide" ? (
