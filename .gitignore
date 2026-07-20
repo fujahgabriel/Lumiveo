@@ -16,3 +16,4 @@ coverage/
 !.env.example
 out/
 tmp/
+plan.md
