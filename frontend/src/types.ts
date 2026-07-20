@@ -36,6 +36,7 @@ export interface Scene {
   durationInFrames: number;
   transition: "none" | "fade" | "slide" | "scale";
   layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
+  sceneLayout?: "media-top" | "media-bottom" | "media-left" | "media-right" | "overlay";
   background: string;
   accent: string;
   copy: Record<string, SceneCopy>;
@@ -148,6 +149,7 @@ export interface StoryboardProposal {
     narration: string;
     durationSeconds: number;
     layout: "device" | "full" | "split" | "minimal" | "gradient" | "highlight";
+    sceneLayout: "media-top" | "media-bottom" | "media-left" | "media-right" | "overlay";
     transition: "none" | "fade" | "slide" | "scale";
     background: string;
     accent: string;

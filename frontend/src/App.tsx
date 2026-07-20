@@ -1083,6 +1083,16 @@ export default function App() {
                 <option value="highlight">Accent Highlight</option>
               </select>
             </div>
+            <label className="field">
+              <span>Scene Layout</span>
+              <select value={selectedScene.sceneLayout ?? "media-top"} onChange={(event) => updateScene((scene) => ({ ...scene, sceneLayout: event.target.value as Scene["sceneLayout"] }))}>
+                <option value="media-top">Media Top — text below</option>
+                <option value="media-bottom">Media Bottom — text above</option>
+                <option value="media-left">Media Left — text on right</option>
+                <option value="media-right">Media Right — text on left</option>
+                <option value="overlay">Media Overlay — full background</option>
+              </select>
+            </label>
           </div>
 
           {selectedScene.layout !== "full" && (

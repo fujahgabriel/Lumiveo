@@ -117,8 +117,8 @@ function DemoScene({
   const { fps } = useVideoConfig();
   const copy = scene.copy[locale] ?? scene.copy[Object.keys(scene.copy)[0]];
   const entrance = spring({ frame, fps, config: { damping: 18, stiffness: 120, mass: 0.8 } });
-  const direction = /^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr";
   const isLandscape = preset === "landscape";
+  const direction = /^(ar|fa|he|ur)(-|$)/i.test(locale) ? "rtl" : "ltr";
   const mediaUrl = asset
     ? `${assetBaseUrl.replace(/\/$/, "")}/${asset.id}?token=${encodeURIComponent(token)}`
     : null;
@@ -126,6 +126,9 @@ function DemoScene({
   const logoUrl = scene.logoAssetId
     ? `${assetBaseUrl.replace(/\/$/, "")}/${scene.logoAssetId}?token=${encodeURIComponent(token)}`
     : null;
+
+  const sl = scene.sceneLayout ?? "media-top";
+  const isRow = sl === "media-left" || sl === "media-right";
 
   const textT = scene.textTransition ?? "fade";
   const speedVal = scene.textTransitionDuration ?? 71;
@@ -175,6 +178,76 @@ function DemoScene({
 
   const textOpacity = textT === "fade" ? progress : 1;
 
+  const mediaEl = (
+    <div
+      style={{
+        width: isRow ? "48%" : "100%",
+        maxWidth: isRow ? 820 : 880,
+        transform: sl !== "overlay" ? `translateY(${(1 - entrance) * 80}px) scale(${0.94 + entrance * 0.06})` : "none",
+      }}
+    >
+      <MediaFrame asset={asset} src={mediaUrl} scene={scene} projectId={projectId} />
+    </div>
+  );
+
+  const textEl = (
+    <div
+      dir={direction}
+      style={{
+        width: isRow ? "42%" : "100%",
+        textAlign: direction === "rtl" ? "right" : isRow ? "left" : "center",
+        opacity: textContainerOpacity,
+        transform: `translateY(${textContainerY}px)`,
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 14,
+          marginBottom: 28,
+          color: scene.accent,
+          fontSize: isLandscape ? 24 : 28,
+          fontWeight: 700,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+        }}
+      >
+        {scene.showLogo && logoUrl ? (
+          <Img
+            src={logoUrl}
+            style={{
+              width: scene.logoWidth ?? 120,
+              height: scene.logoHeight ?? 120,
+              borderRadius: scene.logoRadius ?? 20,
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          <span style={{ width: 34, height: 4, borderRadius: 99, background: scene.accent }} />
+        )}
+        {scene.name}
+      </div>
+      <div
+        style={{
+          fontSize: scene.fontSize ? `${scene.fontSize}px` : captionSize(copy?.caption ?? "", preset),
+          fontWeight: scene.fontWeight ?? 720,
+          fontStyle: scene.fontStyle ?? "normal",
+          color: scene.textColor ?? "#f7f7f2",
+          fontFamily: scene.fontFamily ? `"${scene.fontFamily}"` : undefined,
+          lineHeight: 1.04,
+          letterSpacing: "-0.045em",
+          textWrap: "balance",
+          transform: `translate(${tx}px, ${ty}px) scale(${finalScale})`,
+          opacity: textOpacity,
+          display: "inline-block",
+        }}
+      >
+        {renderedCaption}
+      </div>
+    </div>
+  );
+
   return (
     <AbsoluteFill
       style={{
@@ -190,99 +263,72 @@ function DemoScene({
         <Audio src={backgroundAudioUrl} volume={voiceoverVolume} />
       )}
 
-      <div
-        style={{
-          position: "absolute",
-          width: "80%",
-          aspectRatio: "1",
-          borderRadius: "50%",
-          background: scene.accent,
-          filter: "blur(140px)",
-          opacity: 0.14,
-          left: isLandscape ? "48%" : "10%",
-          top: "8%",
-          transform: `scale(${0.8 + entrance * 0.2})`,
-        }}
-      />
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: isLandscape ? "row" : "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: isLandscape ? 100 : 72,
-          height: "100%",
-          padding: isLandscape ? "80px 120px" : "120px 84px",
-          boxSizing: "border-box",
-        }}
-      >
+      {sl === "overlay" ? (
+        <>
+          {mediaUrl && (
+            <AbsoluteFill>
+              {asset?.mediaType === "video" ? (
+                <OffthreadVideo src={mediaUrl} muted style={{
+                  width: "100%", height: "100%", objectFit: scene.mediaFit ?? "cover",
+                  objectPosition: `${scene.mediaX ?? 50}% ${scene.mediaY ?? 50}%`,
+                }} />
+              ) : asset?.mediaType === "gif" ? (
+                <Gif src={mediaUrl} fit={scene.mediaFit === "none" ? "cover" : (scene.mediaFit ?? "cover")}
+                  style={{ width: "100%", height: "100%", objectFit: scene.mediaFit ?? "cover",
+                    objectPosition: `${scene.mediaX ?? 50}% ${scene.mediaY ?? 50}%` }} />
+              ) : (
+                <Img src={mediaUrl} style={{ width: "100%", height: "100%", objectFit: scene.mediaFit ?? "cover",
+                  objectPosition: `${scene.mediaX ?? 50}% ${scene.mediaY ?? 50}%` }} />
+              )}
+            </AbsoluteFill>
+          )}
+          <AbsoluteFill
+            style={{
+              background: `linear-gradient(to top, ${scene.background}dd 0%, ${scene.background}88 40%, ${scene.background}44 70%, transparent 100%)`,
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+              padding: "80px 84px",
+              boxSizing: "border-box",
+            }}
+          >
+            {textEl}
+          </AbsoluteFill>
+        </>
+      ) : (
         <div
           style={{
-            width: isLandscape ? "48%" : "100%",
-            maxWidth: isLandscape ? 820 : 880,
-            transform: `translateY(${(1 - entrance) * 80}px) scale(${0.94 + entrance * 0.06})`,
-          }}
-        >
-          <MediaFrame asset={asset} src={mediaUrl} scene={scene} projectId={projectId} />
-        </div>
-
-        <div
-          dir={direction}
-          style={{
-            width: isLandscape ? "42%" : "100%",
-            textAlign: direction === "rtl" ? "right" : isLandscape ? "left" : "center",
-            opacity: textContainerOpacity,
-            transform: `translateY(${textContainerY}px)`,
+            display: "flex",
+            flexDirection: isRow ? "row" : "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: isRow ? 100 : 72,
+            height: "100%",
+            padding: isRow ? "80px 120px" : "120px 84px",
+            boxSizing: "border-box",
           }}
         >
           <div
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 14,
-              marginBottom: 28,
-              color: scene.accent,
-              fontSize: isLandscape ? 24 : 28,
-              fontWeight: 700,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
+              position: "absolute",
+              width: "80%",
+              aspectRatio: "1",
+              borderRadius: "50%",
+              background: scene.accent,
+              filter: "blur(140px)",
+              opacity: 0.14,
+              left: isLandscape ? "48%" : "10%",
+              top: "8%",
+              transform: `scale(${0.8 + entrance * 0.2})`,
             }}
-          >
-            {scene.showLogo && logoUrl ? (
-              <Img
-                src={logoUrl}
-                style={{
-                  width: scene.logoWidth ?? 120,
-                  height: scene.logoHeight ?? 120,
-                  borderRadius: scene.logoRadius ?? 20,
-                  objectFit: "cover",
-                }}
-              />
-            ) : (
-              <span style={{ width: 34, height: 4, borderRadius: 99, background: scene.accent }} />
-            )}
-            {scene.name}
-          </div>
-          <div
-            style={{
-              fontSize: scene.fontSize ? `${scene.fontSize}px` : captionSize(copy?.caption ?? "", preset),
-              fontWeight: scene.fontWeight ?? 720,
-              fontStyle: scene.fontStyle ?? "normal",
-              color: scene.textColor ?? "#f7f7f2",
-              fontFamily: scene.fontFamily ? `"${scene.fontFamily}"` : undefined,
-              lineHeight: 1.04,
-              letterSpacing: "-0.045em",
-              textWrap: "balance",
-              transform: `translate(${tx}px, ${ty}px) scale(${finalScale})`,
-              opacity: textOpacity,
-              display: "inline-block",
-            }}
-          >
-            {renderedCaption}
-          </div>
+          />
+          {sl === "media-top" || sl === "media-left" ? (
+            <>{mediaEl}{textEl}</>
+          ) : (
+            <>{textEl}{mediaEl}</>
+          )}
         </div>
-      </div>
+      )}
     </AbsoluteFill>
   );
 }

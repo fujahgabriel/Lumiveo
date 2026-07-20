@@ -38,6 +38,7 @@ export function addScene(
     durationInFrames: project.fps * 3,
     transition: "fade",
     layout: "device",
+    sceneLayout: "media-top",
     background: "#171714",
     accent: "#e6ff5c",
     copy: {

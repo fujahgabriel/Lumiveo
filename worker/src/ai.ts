@@ -17,6 +17,7 @@ const proposedSceneSchema = z.object({
   narration: z.string().min(1).max(2_000),
   durationSeconds: z.number().min(1).max(60),
   layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]),
+  sceneLayout: z.enum(["media-top", "media-bottom", "media-left", "media-right", "overlay"]).default("media-top"),
   transition: z.enum(["none", "fade", "slide", "scale"]),
   background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -172,6 +173,7 @@ export class AiService {
         assetId: scene.assetId,
         durationInFrames: Math.round(scene.durationSeconds * project.fps),
         transition: scene.transition,
+        sceneLayout: scene.sceneLayout ?? "media-top",
         layout: scene.layout,
         background: scene.background,
         accent: scene.accent,
@@ -272,6 +274,7 @@ class LocalProvider implements AiProvider {
           durationSeconds: scene.durationInFrames / project.fps,
           layout: scene.layout,
           transition: scene.transition,
+          sceneLayout: scene.sceneLayout ?? "media-top",
           background: scene.background,
           accent: scene.accent,
           fontFamily: scene.fontFamily,
@@ -305,6 +308,7 @@ class LocalProvider implements AiProvider {
         durationSeconds: 3,
         layout: "device" as const,
         transition: "fade" as const,
+        sceneLayout: "media-top" as const,
         background: "#171714",
         accent: "#e6ff5c",
         fontFamily: "Inter",
@@ -510,6 +514,7 @@ const jsonShape = {
       durationSeconds: "number 1-60",
       layout: "device|full|split|minimal|gradient|highlight",
       transition: "none|fade|slide|scale",
+      sceneLayout: "media-top|media-bottom|media-left|media-right|overlay",
       background: "#hex color",
       accent: "#hex accent color",
       fontFamily: "Inter, Poppins, Roboto, etc.",
@@ -550,7 +555,7 @@ function promptFor(project: Project, request: GenerationRequest) {
     lines.push(`Available font families: ${availableFontFamilies.join(", ")}`);
     lines.push(`Available device presets: ${availableDevicePresets.join(", ")}`);
     lines.push(
-      "For each scene suggest background, accent, fontFamily, fontSize, fontWeight, fontStyle, textColor, textTransition, textTransitionDuration, textTransitionDirection, and devicePreset that match the industry, tone, and creativity level.",
+      "For each scene suggest background, accent, fontFamily, fontSize, fontWeight, fontStyle, textColor, textTransition, textTransitionDuration, textTransitionDirection, sceneLayout, and devicePreset that match the industry, tone, and creativity level.",
     );
     lines.push("Choose fontFamily from the available list. Keep typography consistent across scenes.");
   }

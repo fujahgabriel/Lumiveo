@@ -36,6 +36,7 @@ export const sceneSchema = z.object({
   durationInFrames: z.number().int().min(15).max(18_000),
   transition: z.enum(["none", "fade", "slide", "scale"]).default("fade"),
   layout: z.enum(["device", "full", "split", "minimal", "gradient", "highlight"]).default("device"),
+  sceneLayout: z.enum(["media-top", "media-bottom", "media-left", "media-right", "overlay"]).default("media-top"),
   background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   copy: localizedCopySchema,
