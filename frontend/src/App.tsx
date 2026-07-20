@@ -5,6 +5,7 @@ import {
   ChevronDown,
   CircleAlert,
   Clapperboard,
+  Copy,
   Download,
   FileImage,
   Film,
@@ -196,6 +197,7 @@ export default function App() {
   const [loadingVoices, setLoadingVoices] = useState(false);
   const [voicesError, setVoicesError] = useState<string | null>(null);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const lastRenderRef = useRef<{ preset: ExportPreset; format: ExportFormat; locale: string; scale?: number; crf?: number } | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
 
   const togglePlayAudio = (assetId: string) => {
@@ -642,12 +644,17 @@ export default function App() {
 
   const startRender = async (input: { preset: ExportPreset; format: ExportFormat; locale: string; scale?: number; crf?: number }) => {
     if (!project) return;
+    lastRenderRef.current = input;
     try {
       const job = await api.startRender({ projectId: project.id, ...input });
       setRenderJob(job);
     } catch {
       showNotice("Failed to start export. Check your render config.");
     }
+  };
+
+  const retryRender = () => {
+    if (lastRenderRef.current) void startRender(lastRenderRef.current);
   };
 
   const generateVoiceover = async (sceneId: string, narration: string) => {
@@ -1311,6 +1318,7 @@ export default function App() {
           })}
         </div>
         <div className="timeline-actions">
+          <button title="Duplicate scene" onClick={duplicateScene}><Copy size={15} /></button>
           <button title="Move scene earlier" onClick={() => moveScene(-1)}><ArrowUp size={15} /></button>
           <button title="Move scene later" onClick={() => moveScene(1)}><ArrowDown size={15} /></button>
           <button title="Delete scene" disabled={project.scenes.length === 1} onClick={deleteScene}><Trash2 size={15} /></button>
@@ -1405,7 +1413,7 @@ export default function App() {
       {modal === "settings" ? <SettingsPage settings={settings} voices={voices} project={project} onBack={() => setModal(null)} onSave={saveSettings} onClear={async () => { setModal(null); setProject(null); setSelectedSceneId(""); await refreshProjectsList(); }} /> : null}
       {modal === "locale" ? <LocaleModal project={project} busy={busy === "translation"} onClose={() => setModal(null)} onGenerate={(code) => void generate("translation", code)} /> : null}
       {modal === "proposal" && proposal ? <ProposalModal proposal={proposal} busy={busy === "apply"} onClose={() => { setProposal(null); setModal(null); }} onApply={() => void applyProposal()} /> : null}
-      {modal === "export" ? <ExportModal project={project} job={renderJob} onClose={() => { setModal(null); setRenderJob(null); }} onStart={startRender} onCancel={() => renderJob && void api.cancelRender(renderJob.id).then(setRenderJob)} /> : null}
+      {modal === "export" ? <ExportModal project={project} job={renderJob} onClose={() => { setModal(null); setRenderJob(null); }} onStart={startRender} onCancel={() => renderJob && void api.cancelRender(renderJob.id).then(setRenderJob)} onRetry={retryRender} /> : null}
     </div>
   );
 
@@ -1429,6 +1437,24 @@ export default function App() {
     const next = active.scenes.filter((scene) => scene.id !== selectedSceneId);
     setSelectedSceneId(next[Math.max(0, index - 1)].id);
     updateProject((current) => ({ ...current, scenes: next }));
+  }
+
+  function duplicateScene() {
+    const active = project;
+    if (!active) return;
+    const index = active.scenes.findIndex((scene) => scene.id === selectedSceneId);
+    const source = active.scenes[index];
+    if (!source) return;
+    const id = crypto.randomUUID();
+    const scene: Scene = {
+      ...JSON.parse(JSON.stringify(source)),
+      id,
+      name: `${source.name} (copy)`,
+    };
+    const scenes = [...active.scenes];
+    scenes.splice(index + 1, 0, scene);
+    setSelectedSceneId(id);
+    updateProject((current) => ({ ...current, scenes }));
   }
 
   async function completeOnboarding(next: {

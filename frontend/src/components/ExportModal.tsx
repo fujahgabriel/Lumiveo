@@ -1,4 +1,4 @@
-import { Check, CircleAlert, Download, LoaderCircle } from "lucide-react";
+import { Check, CircleAlert, Download, LoaderCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import type { ExportFormat, ExportPreset, ExportQuality, Project, RenderJob } from "../types";
 import { durationFor, presetDimensions } from "../video/config";
@@ -10,12 +10,14 @@ export function ExportModal({
   onClose,
   onStart,
   onCancel,
+  onRetry,
 }: {
   project: Project;
   job: RenderJob | null;
   onClose: () => void;
   onStart: (input: { preset: ExportPreset; format: ExportFormat; locale: string; scale?: number; crf?: number }) => Promise<void>;
   onCancel: () => void;
+  onRetry: () => void;
 }) {
   const [preset, setPreset] = useState<ExportPreset>("portrait");
   const [format, setFormat] = useState<ExportFormat>("mp4");
@@ -51,6 +53,11 @@ export function ExportModal({
           <div className="progress-track">
             <i style={{ width: `${job.progress * 100}%` }} />
           </div>
+          {job.status === "failed" ? (
+            <button className="primary-button" type="button" onClick={onRetry} style={{ marginTop: 12, width: "100%" }}>
+              <RotateCcw size={15} /> Retry export
+            </button>
+          ) : null}
         </div>
       ) : (
         <>

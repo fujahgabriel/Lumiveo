@@ -30,6 +30,7 @@ interface SceneDraft {
   fontStyle: string;
   textColor: string;
   textTransition: Scene["textTransition"];
+  sceneLayout: Scene["sceneLayout"];
   devicePreset: string;
 }
 
@@ -68,9 +69,10 @@ export function ProjectWizard({
       fontWeight: "bold",
       fontStyle: "normal",
       textColor: "#f7f7f2",
-      textTransition: "fade" as const,
-      devicePreset: "iphone-6.7",
-    })));
+        textTransition: "fade" as const,
+        sceneLayout: "media-top" as const,
+        devicePreset: "iphone-6.7",
+      })));
     setStep("review");
   };
 
@@ -102,6 +104,7 @@ export function ProjectWizard({
         fontStyle: s.fontStyle,
         textColor: s.textColor,
         textTransition: s.textTransition,
+        sceneLayout: s.sceneLayout,
         devicePreset: s.devicePreset,
       })));
       setStep("review");
@@ -133,6 +136,7 @@ export function ProjectWizard({
         fontWeight: s.fontWeight,
         fontStyle: s.fontStyle,
         textTransition: s.textTransition,
+        sceneLayout: s.sceneLayout,
         devicePreset: s.devicePreset,
         showLogo: false,
         logoAssetId: null,
@@ -386,7 +390,7 @@ function ReviewStep({
               <strong>{scene.name}</strong>
               <span className="wizard-scene-caption">{scene.caption}</span>
               <span className="wizard-scene-narration">{scene.narration}</span>
-              <span className="wizard-scene-meta">{scene.layout} &middot; {scene.transition}</span>
+              <span className="wizard-scene-meta">{scene.layout} &middot; {scene.transition} &middot; {scene.sceneLayout}</span>
             </div>
             <div className="wizard-scene-swatch" style={{ background: scene.background }}>
               <span style={{ color: scene.accent }}><Sparkles size={14} /></span>
